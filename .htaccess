@@ -1,0 +1,73 @@
+# GigTrack — configuração do servidor (Hostinger / Apache · LiteSpeed)
+
+Options -Indexes
+DirectoryIndex index.html
+AddDefaultCharset UTF-8
+ServerSignature Off
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # 1) Sempre HTTPS
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # 2) www.gigtrack.com.br → gigtrack.com.br (endereço único)
+  RewriteCond %{HTTP_HOST} ^www\.gigtrack\.com\.br$ [NC]
+  RewriteRule ^ https://gigtrack.com.br%{REQUEST_URI} [L,R=301]
+
+  # 3) Pastas do repositório que não devem ficar públicas
+  RewriteRule ^(supabase|docs|tests|\.github|\.git)(/|$) - [F,L,NC]
+  RewriteRule (^|/)(README|CHANGELOG|LICENSE)(\.md)?$ - [F,L,NC]
+  RewriteRule (^|/)(package(-lock)?\.json|composer\.(json|lock)|\.gitignore|\.gitattributes|\.editorconfig|[^/]+\.(bat|sh|py))$ - [F,L,NC]
+
+  # 4) Endereço antigo da API (/api/cifra) continua funcionando
+  RewriteRule ^api/cifra/?$ api/cifra.php [L,QSA]
+</IfModule>
+
+# Arquivos ocultos (.env, .git, etc.)
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+
+# Tipos de arquivo
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+  AddType image/svg+xml .svg
+</IfModule>
+
+# Segurança
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob: https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; upgrade-insecure-requests"
+</IfModule>
+
+# Cache: arquivos versionados (?v=) e imagens por bastante tempo; HTML sempre atualizado
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresDefault "access plus 1 hour"
+  ExpiresByType text/html "access plus 0 seconds"
+  ExpiresByType application/manifest+json "access plus 1 day"
+  ExpiresByType text/css "access plus 30 days"
+  ExpiresByType application/javascript "access plus 30 days"
+  ExpiresByType text/javascript "access plus 30 days"
+  ExpiresByType image/png "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "\.(html)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# Compressão
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/plain application/javascript text/javascript application/json application/manifest+json image/svg+xml
+</IfModule>
+
+ErrorDocument 404 /404.html

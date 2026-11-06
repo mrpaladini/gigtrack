@@ -1,0 +1,25 @@
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Dependências e saídas de teste
+node_modules/
+tests/output/
+playwright-report/
+test-results/
+
+# Segredos — nunca enviar ao GitHub
+.env
+.env.*
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
