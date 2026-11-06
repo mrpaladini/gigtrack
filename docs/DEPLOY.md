@@ -82,7 +82,8 @@ No [painel do Supabase](https://supabase.com/dashboard/project/ttaxdkoaecxomsagn
 
 **Cadastro sem e-mail de confirmação:** em *Authentication → Sign In / Providers → Email*, desligue
 **Confirm email** e salve. Assim ninguém recebe e-mail do Supabase ao criar conta, e a pessoa já entra
-direto. (Se alguém esquecer a senha, um administrador redefine pela área administrativa.)
+para a tela "Conta aguardando liberação"; um administrador libera pelo escudo → **Liberar conta**.
+(Se alguém esquecer a senha, um administrador redefine pela área administrativa.)
 
 **Recomendado:** em *Authentication → Attack Protection* (ou *Password security*), ligue a proteção
 contra senhas vazadas.

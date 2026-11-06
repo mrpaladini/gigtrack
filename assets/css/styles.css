@@ -290,6 +290,11 @@ background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--rad
 text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;border:1px solid var(--border);}
 .badge svg{width:.8rem;height:.8rem;}
 .badge-admin{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,var(--border));}
+.badge-pending{color:#fff;background:var(--danger);border-color:var(--danger);}
+.pending-count{color:var(--danger);}
+.iconbtn.has-count{position:relative;}
+.iconbtn .count{position:absolute;top:-.35rem;right:-.35rem;min-width:1.15rem;height:1.15rem;padding:0 .3rem;border-radius:999px;
+background:var(--danger);color:#fff;font-size:.68rem;font-weight:700;line-height:1.15rem;text-align:center;}
 .badge-warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--border));}
 .pill-public{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--border));}
 .checklist{display:flex;flex-direction:column;gap:.4rem;}

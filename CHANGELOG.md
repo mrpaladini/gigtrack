@@ -1,5 +1,16 @@
 # Mudanças
 
+## 1.3.0 — 06/11/2026 · Liberação de contas pelo admin
+
+- Contas novas ficam **aguardando liberação**: a pessoa vê uma tela de espera e não consegue criar
+  banda, entrar com convite nem ver músicas públicas até um admin liberar (regra garantida no banco).
+- Na área administrativa: selo "Aguardando liberação", botão **Liberar conta** (também confirma o
+  e-mail, então funciona com ou sem o "Confirm email" do Supabase) e **Bloquear** para contas liberadas.
+- O ícone de escudo mostra quantas contas estão esperando.
+- Ninguém altera o próprio status de aprovação pela API (permissões por coluna em `profiles`).
+- Contas que já existiam e estavam confirmadas ficaram liberadas automaticamente.
+- Banco: migration `20261106220000_aprovacao_contas.sql`.
+
 ## 1.2.0 — 06/11/2026 · Administração, músicas públicas e cópias
 
 - **Área administrativa** (menu com escudo no topo, só para o grupo *admins*): lista de usuários com

@@ -114,6 +114,7 @@ var ui = {
   authTab: 'login',
   authError: '',
   authBusy: false,
+  authInfo: "",
   bandId: savedNav.bandId || null,
   tab: savedNav.tab || 'songs',
   showId: null,
@@ -159,6 +160,7 @@ function renderScreen(){
   if(!configOk) return renderSetupNeeded();
   if(ui.screen === 'loading') return '<div class="centerscreen"><div class="spinner" role="status" aria-label="Carregando"></div><p>Carregando GigTrack…</p></div>';
   if(ui.screen === 'auth') return renderAuth();
+  if(profile && profile.approved === false && !isAdmin) return renderPending();
   if(profile && profile.must_change_password) return renderForcePassword();
   var band = ui.bandId ? cache.bands.find(function(b){ return b.id===ui.bandId; }) : null;
   var body;
@@ -198,6 +200,7 @@ function renderAuth(){
     '</div>' +
     '<form id="auth-form" class="authform">' +
     (ui.authError ? '<div class="err">'+escapeHtml(ui.authError)+'</div>' : '') +
+    (ui.authInfo && !ui.authError ? '<div class="info">'+escapeHtml(ui.authInfo)+'</div>' : '') +
     (isLogin ? '' : '<div class="field"><label class="u-label">Seu nome</label><input type="text" id="f-auth-name" placeholder="Como a banda vai te ver" required></div>') +
     (isLogin
       ? '<div class="field"><label class="u-label">E-mail ou usuário</label><input type="text" id="f-auth-email" required autocomplete="username" autocapitalize="off" spellcheck="false"></div>'
@@ -225,7 +228,8 @@ function renderTopbar(band, mode){
       '<span class="name">'+escapeHtml(band.name)+'</span></div>';
   }
   var who = profile ? '<span class="userchip"><span class="uname">'+escapeHtml(profile.display_name||'')+'</span>'+
-    (isAdmin && mode !== 'admin' ? '<button class="iconbtn" data-action="open-admin" aria-label="Administração" title="Administração">'+icon('shield')+'</button>' : '') +
+    (isAdmin && mode !== 'admin' ? (function(){ var pc=(cache.adminUsers||[]).filter(function(u){return !u.approved;}).length;
+      return '<button class="iconbtn has-count" data-action="open-admin" aria-label="Administração'+(pc?' — '+pc+' conta(s) aguardando liberação':'')+'" title="Administração">'+icon('shield')+(pc?'<span class="count">'+pc+'</span>':'')+'</button>'; })() : '') +
     '<button class="iconbtn" data-action="open-account" aria-label="Minha conta" title="Minha conta">'+icon('key')+'</button>' +
     '<button class="iconbtn" data-action="logout" aria-label="Sair da conta" title="Sair">'+icon('logout')+'</button></span>' : '';
   return '<header class="topbar">' + crumb + '<span class="spacer"></span>' + who + '</header>';
@@ -530,6 +534,7 @@ async function loadProfile(){
   profile = data || { id: session.user.id, display_name: session.user.email.split('@')[0] };
   var adm = await sb.rpc('is_app_admin');
   isAdmin = !adm.error && adm.data === true;
+  if(isAdmin) await loadAdminUsers();
 }
 
 async function loadBands(){
@@ -580,6 +585,7 @@ async function prefetchSignedUrls(paths){
    AUTH ACTIONS
    ============================================================ */
 async function doLogin(email, pass){
+  ui.authInfo = '';
   // usuários sem e-mail (ex.: gigadmin) entram pelo nome de usuário
   if(email && email.indexOf('@') < 0) email = email.trim().toLowerCase() + '@gigtrack.com.br';
   ui.authBusy = true; ui.authError=''; render();
@@ -596,7 +602,7 @@ async function doSignup(email, pass, name){
   if(data && data.user && !data.session){
     ui.authError = '';
     ui.authTab = 'login';
-    toast('Conta criada! Agora é só entrar com seu e-mail e senha.');
+    ui.authInfo = 'Conta criada! Um administrador do GigTrack precisa liberar seu acesso. Depois disso, é só entrar com seu e-mail e senha.';
     render();
     return;
   }
@@ -606,7 +612,7 @@ function translateAuthError(error){
   if(/invalid login credentials/i.test(msg)) return 'Usuário/e-mail ou senha incorretos.';
   if(/user already registered/i.test(msg)) return 'Já existe uma conta com esse e-mail.';
   if(/password should be at least/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
-  if(/email not confirmed/i.test(msg)) return 'Essa conta ainda não foi liberada. Peça para um administrador do GigTrack redefinir sua senha.';
+  if(/email not confirmed/i.test(msg)) return 'Sua conta foi criada e está aguardando a liberação de um administrador do GigTrack. Tente de novo depois que ela for liberada.';
   return msg;
 }
 async function doLogout(){
@@ -1073,22 +1079,27 @@ function renderAdmin(){
     return !q || (u.email||'').toLowerCase().indexOf(q)>-1 || (u.display_name||'').toLowerCase().indexOf(q)>-1;
   });
   var total = (cache.adminUsers||[]).length, admins = (cache.adminUsers||[]).filter(function(u){return u.is_admin;}).length;
+  var pending = (cache.adminUsers||[]).filter(function(u){return !u.approved;}).length;
   var rows = users.map(function(u){
     var me = u.id === session.user.id;
     return '<div class="userrow">' +
       '<div class="uinfo"><div class="uname2">'+escapeHtml(u.display_name||'—')+(me?' <span class="muted">(você)</span>':'')+'</div>' +
       '<div class="uemail">'+escapeHtml(loginLabel(u.email))+'</div>' +
       '<div class="umeta">Criado em '+fmtDateTime(u.created_at)+' · Último acesso: '+fmtDateTime(u.last_sign_in_at)+' · '+u.band_count+' banda'+(u.band_count===1?'':'s')+'</div>' +
-      '<div class="ubadges">'+(u.is_admin?'<span class="badge badge-admin">'+icon('shield')+'Admin</span>':'')+
+      '<div class="ubadges">'+(u.approved?'':'<span class="badge badge-pending">Aguardando liberação</span>')+
+        (u.is_admin?'<span class="badge badge-admin">'+icon('shield')+'Admin</span>':'')+
         (u.must_change_password?'<span class="badge badge-warn">Troca de senha pendente</span>':'')+'</div></div>' +
       '<div class="uactions">' +
+      (u.approved ? '' : '<button class="btn btn-primary" data-action="admin-approve" data-id="'+u.id+'">'+icon('check')+'Liberar conta</button>') +
       '<button class="btn" data-action="admin-reset" data-id="'+u.id+'">'+icon('key')+'Redefinir senha</button>' +
       (me ? '' : (u.is_admin
         ? '<button class="btn btn-danger" data-action="admin-unset" data-id="'+u.id+'">'+icon('shield')+'Tirar admin</button>'
-        : '<button class="btn" data-action="admin-set" data-id="'+u.id+'">'+icon('shield')+'Tornar admin</button>')) +
+        : '<button class="btn" data-action="admin-set" data-id="'+u.id+'">'+icon('shield')+'Tornar admin</button>' +
+          (u.approved ? '<button class="btn btn-danger" data-action="admin-block" data-id="'+u.id+'">'+icon('close')+'Bloquear</button>' : ''))) +
       '</div></div>';
   }).join('') || '<div class="empty"><p>Nenhum usuário encontrado.</p></div>';
-  return '<div class="hero"><h1>Administração</h1><p>'+total+' usuário'+(total===1?'':'s')+' · '+admins+' administrador'+(admins===1?'':'es')+'. Redefina senhas e gerencie quem é admin.</p></div>' +
+  return '<div class="hero"><h1>Administração</h1><p>'+total+' usuário'+(total===1?'':'s')+' · '+admins+' administrador'+(admins===1?'':'es')+
+    (pending ? ' · <strong class="pending-count">'+pending+' aguardando liberação</strong>' : '')+'. Libere contas novas, redefina senhas e gerencie quem é admin.</p></div>' +
     '<div class="toolbar"><div class="search">'+icon('search')+'<input type="text" placeholder="Buscar por nome ou e-mail" value="'+escapeHtml(ui.search||'')+'" data-action="search" aria-label="Buscar usuário"></div>' +
     '<button class="btn" data-action="admin-refresh">'+icon('users')+'Atualizar</button></div>' +
     '<div class="userlist">'+rows+'</div>';
@@ -1135,6 +1146,31 @@ async function adminSetAdmin(userId, makeAdmin){
   await loadAdminUsers();
   render();
   toast(makeAdmin ? 'Agora é administrador.' : 'Não é mais administrador.');
+}
+async function adminSetApproved(userId, approved){
+  var { error } = await sb.rpc('admin_set_approved', { p_user_id: userId, p_approved: approved });
+  if(error){ toast(errMsg(error), true); return; }
+  await loadAdminUsers();
+  render();
+  toast(approved ? 'Conta liberada. A pessoa já pode entrar.' : 'Conta bloqueada.');
+}
+function renderPending(){
+  return '<div class="authwrap"><div class="authcard" style="text-align:center;">' +
+    '<div class="brand"><span class="dot"></span>GigTrack</div>' +
+    '<h2 style="font-size:1.4rem;margin:.9rem 0 .4rem;">Conta aguardando liberação</h2>' +
+    '<p class="tagline">Olá, '+escapeHtml((profile&&profile.display_name)||'')+'! Sua conta foi criada. Um administrador do GigTrack precisa liberar o acesso antes de você começar.</p>' +
+    '<div class="authform"><button class="btn btn-primary btn-block" data-action="pending-recheck">'+icon('check')+'Já foi liberada? Verificar</button>' +
+    '<button class="btn btn-ghost btn-block" data-action="logout">Sair</button></div>' +
+    '</div></div><div class="toastwrap" id="toastwrap"></div>';
+}
+async function recheckApproval(){
+  await loadProfile();
+  if(profile && profile.approved === false && !isAdmin){ toast('Ainda não foi liberada. Tente mais tarde.'); render(); return; }
+  await loadBands();
+  if(ui.bandId && cache.bands.some(function(b){ return b.id===ui.bandId; })) await loadBandData(ui.bandId); else ui.bandId = null;
+  ui.screen = 'band';
+  render();
+  toast('Conta liberada. Bem-vindo ao GigTrack!');
 }
 async function openAdmin(){
   if(!isAdmin) return;
@@ -1256,7 +1292,7 @@ document.addEventListener('click', function(e){
   if(!t) return;
   var action = t.getAttribute('data-action');
   switch(action){
-    case 'auth-tab': ui.authTab = t.getAttribute('data-tab'); ui.authError=''; render(); break;
+    case 'auth-tab': ui.authTab = t.getAttribute('data-tab'); ui.authError=''; ui.authInfo=''; render(); break;
     case 'logout': doLogout(); break;
     case 'open-admin': openAdmin(); break;
     case 'close-admin': ui.screen='band'; ui.search=''; render(); break;
@@ -1265,6 +1301,9 @@ document.addEventListener('click', function(e){
     case 'admin-gen-pw': var pwf=document.getElementById('f-reset-pw'); if(pwf) pwf.value=genPassword(); break;
     case 'admin-set': (function(id){ var u=(cache.adminUsers||[]).find(function(x){return x.id===id;});
       ui.modal={type:'confirm', title:'Tornar administrador', message:(u?(u.display_name||u.email):'Essa pessoa')+' vai poder ver todos os usuários, redefinir senhas e gerenciar administradores.', confirmLabel:'Tornar admin', onConfirm:function(){ adminSetAdmin(id, true); }}; render(); })(t.getAttribute('data-id')); break;
+    case 'admin-approve': adminSetApproved(t.getAttribute('data-id'), true); break;
+    case 'admin-block': (function(id){ ui.modal={type:'confirm', title:'Bloquear conta', message:'A pessoa sai do GigTrack agora e só volta a entrar quando um administrador liberar a conta de novo. As bandas e músicas dela continuam guardadas.', confirmLabel:'Bloquear', onConfirm:function(){ adminSetApproved(id, false); }}; render(); })(t.getAttribute('data-id')); break;
+    case 'pending-recheck': recheckApproval(); break;
     case 'admin-unset': (function(id){ ui.modal={type:'confirm', title:'Tirar administrador', message:'Essa pessoa perde o acesso à área administrativa.', confirmLabel:'Tirar admin', onConfirm:function(){ adminSetAdmin(id, false); }}; render(); })(t.getAttribute('data-id')); break;
     case 'copy-text': var txt=t.getAttribute('data-text'); if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast('Copiado.'); }, function(){}); break;
     case 'open-account': ui.modal={type:'account'}; render(); break;

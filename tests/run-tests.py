@@ -199,6 +199,7 @@ def run_admin_flow(browser, base, label, vp, touch):
     page.goto(base + '/')
     page.wait_for_selector('.hero h1', timeout=8000)
     check(f'[{label}] admin vê o menu Administração', page.locator('[data-action="open-admin"]').count() == 1)
+    check(f'[{label}] ícone de admin mostra contas aguardando', page.inner_text('[data-action="open-admin"] .count') == '1')
 
     new_band(page, 'Banda Um')
     page.click('[data-action="go-home"]'); page.wait_for_selector('.bandgrid')
@@ -243,7 +244,17 @@ def run_admin_flow(browser, base, label, vp, touch):
     # área administrativa
     page.click('[data-action="open-admin"]')
     page.wait_for_selector('.userrow')
-    check(f'[{label}] admin lista os usuários', page.locator('.userrow').count() == 2)
+    check(f'[{label}] admin lista os usuários', page.locator('.userrow').count() == 3)
+    bruno = page.locator('.userrow', has_text='Bruno')
+    check(f'[{label}] conta nova aparece aguardando liberação', 'aguardando liberação' in bruno.inner_text().lower())
+    check(f'[{label}] contador de contas aguardando', '1 aguardando' in page.inner_text('.hero'))
+    bruno.locator('[data-action="admin-approve"]').click()
+    page.wait_for_function("![...document.querySelectorAll('.userrow')].some(r => r.innerText.includes('Bruno') && r.querySelector('.badge-pending'))")
+    check(f'[{label}] admin libera a conta', page.locator('.userrow', has_text='Bruno').locator('[data-action="admin-block"]').count() == 1)
+    page.locator('.userrow', has_text='Bruno').locator('[data-action="admin-block"]').click()
+    page.click('[data-action="confirm-yes"]')
+    page.wait_for_function("[...document.querySelectorAll('.userrow')].some(r => r.innerText.includes('Bruno') && r.querySelector('.badge-pending'))")
+    check(f'[{label}] admin bloqueia a conta de novo', True)
     check(f'[{label}] gigadmin aparece como usuário', 'gigadmin (usuário)' in page.inner_text('.userlist'))
     page.screenshot(path=str(OUT / f'{label}-admin-3-usuarios.png'), full_page=True)
     check(f'[{label}] área admin sem rolagem lateral', overflow(page) <= 0, f'{overflow(page)}px')
@@ -303,6 +314,24 @@ def run_force_password(browser, base, label, vp, touch):
     report_errors(label + ' troca', errors)
     ctx.close()
 
+def run_pending(browser, base, label, vp, touch):
+    ctx, page = new_page(browser, vp, touch, {'pending': True})
+    errors = []
+    setup_routes(page, errors)
+    page.goto(base + '/')
+    page.wait_for_selector('[data-action="pending-recheck"]', timeout=8000)
+    check(f'[{label}] conta pendente vê a tela de aguardando liberação', 'aguardando liberação' in page.inner_text('.authcard').lower())
+    check(f'[{label}] conta pendente não vê bandas', page.locator('.bandgrid').count() == 0)
+    page.screenshot(path=str(OUT / f'{label}-pendente.png'))
+    page.click('[data-action="pending-recheck"]'); page.wait_for_timeout(300)
+    check(f'[{label}] verificar antes de liberar continua bloqueado', page.locator('[data-action="pending-recheck"]').count() == 1)
+    page.evaluate('window.__mockApprove()')
+    page.click('[data-action="pending-recheck"]')
+    page.wait_for_selector('.hero h1', timeout=8000)
+    check(f'[{label}] depois de liberada entra no app', 'Suas bandas' in page.inner_text('.hero h1'))
+    report_errors(label + ' pendente', errors)
+    ctx.close()
+
 def main():
     port = free_port()
     srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bind', '127.0.0.1', '--directory', str(ROOT)],
@@ -312,7 +341,7 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for label, vp, touch in VIEWPORTS:
-                for fn, nm in ((run_flow, 'fluxo completo'), (run_admin_flow, 'fluxo admin'), (run_force_password, 'troca de senha')):
+                for fn, nm in ((run_flow, 'fluxo completo'), (run_admin_flow, 'fluxo admin'), (run_force_password, 'troca de senha'), (run_pending, 'conta pendente')):
                     try:
                         fn(browser, f'http://127.0.0.1:{port}', label, vp, touch)
                     except Exception as e:

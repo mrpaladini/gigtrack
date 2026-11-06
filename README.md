@@ -87,8 +87,9 @@ CSS ou JS, aumente esse número (ex.: `?v=1.1.1`) para os celulares baixarem a v
 
 - O usuário administrador padrão é **gigadmin** (no login, digite só `gigadmin`). A senha inicial foi
   passada à parte e precisa ser trocada no primeiro acesso.
-- Quem está no grupo *admins* vê o ícone de escudo no topo → lista de usuários, **Redefinir senha** e
-  **Tornar/Tirar admin**.
+- Contas novas ficam **aguardando liberação** até um admin clicar em **Liberar conta**.
+- Quem está no grupo *admins* vê o ícone de escudo no topo (com o número de contas esperando) → lista
+  de usuários, **Liberar conta**, **Bloquear**, **Redefinir senha** e **Tornar/Tirar admin**.
 - As permissões ficam no banco (funções `admin_*` com verificação de `app_admins`); o app só mostra
   ou esconde os botões.
 - Login por nome de usuário: um texto sem `@` vira `<usuário>@gigtrack.com.br`.

@@ -6,7 +6,8 @@
   'use strict';
 
   var TABLES = ['profiles', 'bands', 'band_members', 'band_invites', 'songs', 'shows', 'show_songs', 'files', 'app_admins'];
-  var OPT = window.__MOCK || {};  // { admin: bool, mustChange: bool } definido pelo teste
+  var OPT = window.__MOCK || {};  // { admin, mustChange, pending, email } definido pelo teste
+  window.__mockApprove = function () { var pr = mem.profiles.find(function (x) { return x.id === session.user.id; }); if (pr) pr.approved = true; };
   var mem = {}; TABLES.forEach(function (t) { mem[t] = []; });
   var store = null, assets = null, uid = null, persistent = false;
   var authCb = null, session = null;
@@ -62,12 +63,13 @@
     if (!session) session = { user: { id: 'local', email: 'voce@teste.local' }, access_token: 'teste' };
     if (!persistent) {
       warn('Modo temporário: os dados somem ao recarregar a página.');
-      if (!mem.profiles.length) mem.profiles.push({ id: 'local', display_name: 'Você', must_change_password: !!OPT.mustChange });
+      if (!mem.profiles.length) mem.profiles.push({ id: 'local', display_name: 'Você', must_change_password: !!OPT.mustChange, approved: !OPT.pending });
     }
     session.user.email = OPT.email || 'voce@teste.local';
     if (OPT.admin) mem.app_admins.push({ user_id: session.user.id });
     // outros usuários e uma banda alheia com uma música pública
-    mem.profiles.push({ id: 'u-ana', display_name: 'Ana Baterista', must_change_password: false });
+    mem.profiles.push({ id: 'u-ana', display_name: 'Ana Baterista', must_change_password: false, approved: true });
+    mem.profiles.push({ id: 'u-bruno', display_name: 'Bruno', must_change_password: false, approved: false });
     mem.bands.push({ id: 'b-outra', name: 'Banda da Ana', created_by: 'u-ana' });
     mem.band_members.push({ band_id: 'b-outra', user_id: 'u-ana', role: 'owner' });
     mem.songs.push({ id: 's-publica', band_id: 'b-outra', name: 'Garota de Ipanema', artist: 'Tom Jobim', song_key: 'F',
@@ -75,7 +77,8 @@
       chord_source_url: 'https://www.cifraclub.com.br/tom-jobim/garota-de-ipanema/', is_public: true, created_by: 'u-ana' });
     mem._users = [
       { id: session.user.id, email: session.user.email, created_at: '2026-11-06T10:00:00Z', last_sign_in_at: new Date().toISOString() },
-      { id: 'u-ana', email: 'ana@exemplo.com', created_at: '2026-11-05T09:00:00Z', last_sign_in_at: null }
+      { id: 'u-ana', email: 'ana@exemplo.com', created_at: '2026-11-05T09:00:00Z', last_sign_in_at: null },
+      { id: 'u-bruno', email: 'bruno@exemplo.com', created_at: '2026-11-06T21:00:00Z', last_sign_in_at: null }
     ];
   })();
 
@@ -165,6 +168,9 @@
   async function rpc(name, args) {
     await ready;
     var me = session.user.id, now = new Date().toISOString();
+    var meProf = mem.profiles.find(function (x) { return x.id === me; }) || {};
+    if ((name === 'create_band' || name === 'join_band_with_code' || name === 'list_public_songs') && meProf.approved === false && !mem.app_admins.some(function (a) { return a.user_id === me; }))
+      return { data: null, error: { message: 'Sua conta ainda aguarda liberação de um administrador.' } };
     if (name === 'create_band') {
       if (!String(args.p_name || '').trim()) return { data: null, error: { message: 'Nome da banda não pode ser vazio.' } };
       var b = { id: newId(), name: args.p_name, logo_path: null, created_by: me, created_at: now };
@@ -197,7 +203,7 @@
         var p = mem.profiles.find(function (x) { return x.id === u.id; }) || {};
         return { id: u.id, email: u.email, display_name: p.display_name || '', created_at: u.created_at, last_sign_in_at: u.last_sign_in_at,
           is_admin: mem.app_admins.some(function (a) { return a.user_id === u.id; }), must_change_password: !!p.must_change_password,
-          band_count: mem.band_members.filter(function (m) { return m.user_id === u.id; }).length };
+          band_count: mem.band_members.filter(function (m) { return m.user_id === u.id; }).length, approved: p.approved !== false };
       }), error: null };
     }
     if (name === 'admin_reset_password') {
@@ -213,6 +219,15 @@
       if (!args.p_admin && args.p_user_id === me) return { data: null, error: { message: 'Você não pode remover a si mesmo do grupo de administradores.' } };
       mem.app_admins = mem.app_admins.filter(function (a) { return a.user_id !== args.p_user_id; });
       if (args.p_admin) mem.app_admins.push({ user_id: args.p_user_id });
+      return { data: null, error: null };
+    }
+    if (name === 'admin_set_approved') {
+      if (!isAdm) return deny;
+      if (!args.p_approved && args.p_user_id === me) return { data: null, error: { message: 'Você não pode bloquear a sua própria conta.' } };
+      var ap = mem.profiles.find(function (x) { return x.id === args.p_user_id; });
+      if (!ap) return { data: null, error: { message: 'Usuário não encontrado.' } };
+      ap.approved = !!args.p_approved;
+      if (args.p_user_id === me) window.__selfApproved = true;
       return { data: null, error: null };
     }
     if (name === 'list_public_songs') {
