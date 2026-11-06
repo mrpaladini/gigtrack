@@ -11,20 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: PHP 8.3
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: curl, dom
-
-      - name: Sintaxe do PHP
-        run: php -l api/cifra.php
-
       - name: Sintaxe do JavaScript
         run: for f in assets/js/*.js; do node --check "$f"; done
-
-      - name: Importador de cifras
-        run: bash tests/test-cifra-php.sh
 
       - uses: actions/setup-python@v5
         with:

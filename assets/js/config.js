@@ -5,8 +5,5 @@
  */
 window.GIGTRACK_CONFIG = {
   SUPABASE_URL: 'https://ttaxdkoaecxomsagnoxu.supabase.co',
-  SUPABASE_ANON_KEY: 'sb_publishable_cE5rMGnVRh-j5U2pfHqPKQ_7anYnpf_',
-
-  // Endpoint PHP que busca a cifra no Cifra Club (roda na própria Hostinger).
-  CIFRA_API: '/api/cifra.php'
+  SUPABASE_ANON_KEY: 'sb_publishable_cE5rMGnVRh-j5U2pfHqPKQ_7anYnpf_'
 };

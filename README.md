@@ -2,8 +2,8 @@
 
 **Repertório, setlists e cifras da banda — [gigtrack.com.br](https://gigtrack.com.br)**
 
-O GigTrack organiza o que a banda toca: catálogo de músicas (tom, duração, links do YouTube e
-Spotify, arquivo de partitura), cifras com troca de tom, shows com setlist ordenado, tempo total de
+O GigTrack organiza o que a banda toca: catálogo de músicas (tom, duração, links do YouTube,
+Spotify e Cifra Club, arquivo de partitura), cifras com troca de tom, shows com setlist ordenado, tempo total de
 show e PDF pronto para colar no palco. Cada integrante tem a própria conta; o dono da banda convida
 os outros com um código.
 
@@ -15,7 +15,6 @@ Funciona no celular, no tablet e no computador, e pode ser instalado na tela ini
 | --- | --- |
 | Site | HTML, CSS e JavaScript puros — sem build, sem Node no servidor |
 | Banco, login e arquivos | [Supabase](https://supabase.com) (Postgres + Auth + Storage, com RLS) |
-| Importar cifra do Cifra Club | `api/cifra.php` (PHP 8.1+, roda na própria Hostinger) |
 | PDF do setlist | jsPDF 4.2.1 (hospedado em `assets/vendor/`) |
 | Hospedagem | Hostinger, publicada a partir deste repositório (Git do hPanel) |
 
@@ -28,8 +27,6 @@ gigtrack/
 ├── manifest.webmanifest     instalar como app (Android, iPhone, tablets)
 ├── .htaccess                HTTPS, domínio sem www, segurança, cache e bloqueios
 ├── robots.txt · sitemap.xml
-├── api/
-│   └── cifra.php            busca a cifra no Cifra Club (com cache e limite de uso)
 ├── assets/
 │   ├── css/styles.css       visual (claro/escuro automático, responsivo)
 │   ├── js/config.js         URL e chave pública do Supabase
@@ -55,10 +52,10 @@ Depois disso, cada `git push` na branch `main` atualiza o site.
 
 ## Rodar no computador
 
-Com PHP instalado (a importação de cifra precisa dele):
+Qualquer servidor de arquivos estáticos serve. Com Python:
 
 ```bash
-php -S localhost:8080
+python -m http.server 8080
 ```
 
 Abra http://localhost:8080. O login usa o Supabase de verdade; para testar a criação de conta
@@ -67,20 +64,27 @@ localmente, adicione `http://localhost:8080` em *Authentication → URL Configur
 ## Testes
 
 ```bash
-bash tests/test-cifra-php.sh                      # importador de cifras (sem internet)
 pip install playwright && playwright install chromium
 python3 tests/run-tests.py                        # app completo em 5 tamanhos de tela
 ```
 
 O teste do app usa um Supabase simulado (`tests/mock-supabase.js`) e confere, em celular (360 e
 390 px), tablet (768 e 1024 px) e desktop: o fluxo completo, ausência de rolagem lateral, botões com
-tamanho de dedo, campos que não dão zoom no iPhone, PDF, tela de cifra e o Content-Security-Policy.
+tamanho de dedo, campos que não dão zoom no iPhone, link do Cifra Club, PDF, tela de cifra e o
+Content-Security-Policy.
 As capturas ficam em `tests/output/`.
 
 ## Atualizar arquivos CSS/JS
 
-Os arquivos são referenciados com `?v=1.0.0` no `index.html` e ficam 30 dias em cache. Ao mudar
-CSS ou JS, aumente esse número (ex.: `?v=1.0.1`) para os celulares baixarem a versão nova.
+Os arquivos são referenciados com `?v=1.1.0` no `index.html` e ficam 30 dias em cache. Ao mudar
+CSS ou JS, aumente esse número (ex.: `?v=1.1.1`) para os celulares baixarem a versão nova.
+
+## Cifras e Cifra Club
+
+O Cifra Club bloqueia acessos automáticos vindos de servidores (HTTP 403), por isso o GigTrack não
+busca a cifra sozinho. Cada música guarda o **link do Cifra Club**, que aparece como atalho na lista,
+no setlist e na tela de cifra. Para ter a cifra dentro do app (com troca de tom), abra o link, copie
+a cifra e cole na aba *Editar*.
 
 ## Histórico
 

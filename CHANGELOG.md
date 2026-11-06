@@ -1,5 +1,15 @@
 # Mudanças
 
+## 1.1.0 — 06/11/2026 · Link do Cifra Club
+
+- O Cifra Club recusa acessos vindos do servidor (HTTP 403), então a busca automática da cifra saiu.
+- No lugar, cada música guarda o **link do Cifra Club** (aceita colar sem `https://`; links de outros
+  sites são recusados). O link aparece como atalho "Cifra Club" na lista de músicas, no setlist e
+  como botão "Abrir no Cifra Club" na tela de cifra.
+- A cifra dentro do app continua: copiar no Cifra Club e colar na aba *Editar* (com troca de tom).
+- Removido `api/cifra.php` e seus testes; o site não precisa mais de PHP.
+- Arquivos CSS/JS com `?v=1.1.0` para os navegadores baixarem a versão nova.
+
 ## 1.0.0 — 06/11/2026 · GigTrack
 
 - Novo nome: **Backline → GigTrack**, no domínio **gigtrack.com.br**.

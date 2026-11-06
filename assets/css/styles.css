@@ -262,9 +262,13 @@ color:var(--accent-2);font-weight:700;}
 @media (prefers-reduced-motion: reduce){*{animation-duration:.01ms !important;
 transition-duration:.01ms !important;}}
 
-/* Importar do Cifra Club (formulário da música) */
+/* Link do Cifra Club (formulário da música) */
 .cifraimport{display:flex;gap:.5rem;}
 .cifraimport input{flex:1;min-width:0;}
+.cifraimport .btn{text-decoration:none;}
+.pill-cifraclub{text-decoration:none;color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 40%,var(--border));}
+.setlink{margin-top:.3rem;width:max-content;}
+@media (pointer:coarse){.setlink{padding:.35rem .7rem;font-size:.78rem;}}
 
 /* ============================================================
    RESPONSIVO — celular, tablet e telas de toque

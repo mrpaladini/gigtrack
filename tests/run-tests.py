@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GigTrack — testes ponta a ponta no navegador (celular, tablet e desktop).
 
-Sobe o site com o servidor embutido do PHP, troca o supabase-js por um Supabase simulado em memória
+Sobe o site com um servidor local simples (Python), troca o supabase-js por um Supabase simulado em memória
 (tests/mock-supabase.js), aplica o mesmo Content-Security-Policy do .htaccess e percorre o fluxo
 principal: criar banda → cadastrar músicas → criar show → montar setlist → gerar PDF → abrir cifra.
 
@@ -78,6 +78,14 @@ def run_flow(browser, base, label, vp, touch):
         page.fill('#f-song-min', str(mi)); page.fill('#f-song-sec', str(se))
         if name == 'Tempo Perdido':
             page.fill('#f-song-youtube', 'https://youtube.com/watch?v=x')
+            # link inválido é recusado
+            page.fill('#f-song-cifra-url', 'https://example.com/musica')
+            check(f'[{label}] link de outro site mostra aviso', 'não é do Cifra Club' in page.inner_text('#f-song-cifra-status'))
+            page.click('.modal-foot button[type="submit"]')
+            page.wait_for_timeout(300)
+            check(f'[{label}] link de outro site não é salvo', page.locator('.modal-backdrop').count() == 1)
+            page.fill('#f-song-cifra-url', 'cifraclub.com.br/legiao-urbana/tempo-perdido/')
+            check(f'[{label}] botão Abrir aparece com link válido', page.locator('#f-song-cifra-open').is_visible())
             page.screenshot(path=str(OUT / f'{label}-3-form-musica.png'))
             if vp['width'] <= 600:
                 fs = page.evaluate("() => parseFloat(getComputedStyle(document.querySelector('#f-song-name')).fontSize)")
@@ -86,6 +94,8 @@ def run_flow(browser, base, label, vp, touch):
         page.wait_for_selector('.modal-backdrop', state='detached')
     page.wait_for_selector('.songrow')
     check(f'[{label}] 3 músicas na lista', page.locator('.songrow').count() == 3)
+    href = page.locator('.songrow .pill-cifraclub').first.get_attribute('href') if page.locator('.songrow .pill-cifraclub').count() else ''
+    check(f'[{label}] atalho do Cifra Club na lista', href == 'https://cifraclub.com.br/legiao-urbana/tempo-perdido/', href)
     check(f'[{label}] lista de músicas sem rolagem lateral', overflow(page) <= 0, f'{overflow(page)}px')
     if touch:
         small = page.evaluate("""() => [...document.querySelectorAll('.iconbtn')].filter(b => b.offsetParent)
@@ -106,6 +116,7 @@ def run_flow(browser, base, label, vp, touch):
         page.wait_for_timeout(150)
     page.wait_for_function("document.querySelectorAll('.setrow').length === 3")
     check(f'[{label}] setlist com 3 faixas', page.locator('.setrow').count() == 3)
+    check(f'[{label}] atalho do Cifra Club no setlist', page.locator('.setrow .pill-cifraclub').count() == 1)
     total = page.locator('.summarybar .sb-value').nth(1).inner_text()
     check(f'[{label}] tempo total 14:42', total.strip() == '14:42', total)
     page.locator('[data-action="set-move-down"]').first.click()
@@ -136,8 +147,9 @@ def run_flow(browser, base, label, vp, touch):
     page.wait_for_selector('.editorwrap')
 
     # cifra
-    page.locator('.setrow [data-action="open-chords"]').first.click()
+    page.locator('.setrow:has(.pill-cifraclub) [data-action="open-chords"]').first.click()
     page.wait_for_selector('.cf-modal')
+    check(f'[{label}] tela de cifra tem "Abrir no Cifra Club"', page.locator('.cf-link a[href*="cifraclub.com.br"]').count() == 1)
     check(f'[{label}] tela de cifra abre', page.locator('.cf-modal').is_visible())
     check(f'[{label}] tela de cifra sem rolagem lateral da página', overflow(page) <= 0, f'{overflow(page)}px')
     page.screenshot(path=str(OUT / f'{label}-7-cifra.png'))
@@ -150,7 +162,8 @@ def run_flow(browser, base, label, vp, touch):
 
 def main():
     port = free_port()
-    srv = subprocess.Popen(['php', '-S', f'127.0.0.1:{port}', '-t', str(ROOT)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bind', '127.0.0.1', '--directory', str(ROOT)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(0.8)
         with sync_playwright() as p:

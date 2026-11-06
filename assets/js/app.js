@@ -25,6 +25,7 @@ function icon(name){
     pdf:'<path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M14 3v5h5"/>',
     comment:'<path d="M21 12a8 8 0 1 1-3.4-6.5"/><path d="M21 3l-6 6"/>',
     music:'<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+    external:'<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
     key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
     users:'<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><path d="M17 9a3 3 0 1 0 0-6"/><path d="M22 20c0-2.5-1.7-4.3-4-4.9"/>',
     logout:'<path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
@@ -119,7 +120,7 @@ var ui = {
   busy: false
 };
 var cache = { bands: [], members: [], songs: [], shows: [], showSongs: {}, signedUrls: {} };
-var pendingLogoFile = null, pendingSheetFile = null, pendingChord = null;
+var pendingLogoFile = null, pendingSheetFile = null;
 
 /* ============================================================
    RENDER LOOP
@@ -269,6 +270,7 @@ function renderSongsTab(band){
     if(sg.youtube_url) links += '<a class="pill" href="'+escapeHtml(sg.youtube_url)+'" target="_blank" rel="noopener">'+icon('youtube')+'YouTube</a>';
     if(sg.spotify_url) links += '<a class="pill" href="'+escapeHtml(sg.spotify_url)+'" target="_blank" rel="noopener">'+icon('spotify')+'Spotify</a>';
     if(sg.sheet_path) links += '<a class="pill" href="#" data-action="open-sheet" data-path="'+escapeHtml(sg.sheet_path)+'">'+icon('file')+escapeHtml(sg.sheet_name||'Cifra')+'</a>';
+    if(sg.chord_source_url) links += '<a class="pill pill-cifraclub" href="'+escapeHtml(sg.chord_source_url)+'" target="_blank" rel="noopener">'+icon('external')+'Cifra Club</a>';
     if(sg.chord_sheet) links += '<a class="pill" href="#" data-action="open-chords" data-id="'+sg.id+'">'+icon('music')+'Cifra'+(sg.chord_key?' · '+escapeHtml(sg.chord_key):'')+'</a>';
     if(sg.comment) links += '<span class="pill">'+icon('comment')+'Nota</span>';
     return '<div class="songrow">' +
@@ -368,7 +370,9 @@ function renderShowEditor(band, show){
   var rowsHtml = setSongs.map(function(sg, idx){
     return '<div class="setrow"><div class="num">'+(idx+1)+'</div>' +
       '<div><div class="st">'+escapeHtml(sg.name)+'</div>' +
-      '<div class="ss">'+escapeHtml(sg.artist||'')+(sg.song_key?' · Tom '+escapeHtml(sg.song_key):'')+'</div></div>' +
+      '<div class="ss">'+escapeHtml(sg.artist||'')+(sg.song_key?' · Tom '+escapeHtml(sg.song_key):'')+'</div>' +
+      (sg.chord_source_url ? '<a class="pill pill-cifraclub setlink" href="'+escapeHtml(sg.chord_source_url)+'" target="_blank" rel="noopener">'+icon('external')+'Cifra Club</a>' : '') +
+      '</div>' +
       '<div class="setright">' +
       '<span class="sd mono">'+fmtDuration(sg.duration_sec)+'</span>' +
       '<div class="setctrls">' +
@@ -436,11 +440,11 @@ function songFormBody(song){
   song = song || {};
   var min = Math.floor((song.duration_sec||0)/60), sec = (song.duration_sec||0)%60;
   var sheetLabel = song.sheet_name || null;
-  var chordInfo = song.chord_sheet ? 'Cifra salva'+(song.chord_key?' no tom '+escapeHtml(song.chord_key):'')+'. Importar de novo substitui a atual.' : 'Cole o link: nome, artista, tom e a cifra são preenchidos sozinhos.';
-  return '<div class="field"><label class="u-label" for="f-song-cifra-url">Importar do Cifra Club</label>' +
-    '<div class="cifraimport"><input type="url" id="f-song-cifra-url" placeholder="https://www.cifraclub.com.br/artista/musica/" value="'+escapeHtml(song.chord_source_url||'')+'">' +
-    '<button type="button" class="btn" data-action="import-cifra-form" id="f-song-cifra-btn">Buscar</button></div>' +
-    '<div class="hint" id="f-song-cifra-status">'+chordInfo+'</div></div>' +
+  var cifraUrl = song.chord_source_url || '';
+  return '<div class="field"><label class="u-label" for="f-song-cifra-url">Link do Cifra Club</label>' +
+    '<div class="cifraimport"><input type="text" id="f-song-cifra-url" inputmode="url" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="https://www.cifraclub.com.br/artista/musica/" value="'+escapeHtml(cifraUrl)+'">' +
+    '<a class="btn" id="f-song-cifra-open" target="_blank" rel="noopener" href="'+escapeHtml(cifraUrl||'#')+'"'+(cifraUrl?'':' hidden')+'>'+icon('external')+'Abrir</a></div>' +
+    '<div class="hint" id="f-song-cifra-status">Cole o link da música no Cifra Club. Ele vira um atalho na lista de músicas e no setlist.</div></div>' +
     '<div class="field"><label class="u-label">Nome da música *</label>' +
     '<input type="text" id="f-song-name" required value="'+escapeHtml(song.name||'')+'"></div>' +
     '<div class="row2"><div class="field"><label class="u-label">Banda / artista original</label>' +
@@ -679,46 +683,26 @@ function readSongForm(){
     duration_sec: (parseInt(document.getElementById('f-song-min').value,10)||0)*60 + (parseInt(document.getElementById('f-song-sec').value,10)||0),
     youtube_url: document.getElementById('f-song-youtube').value.trim(),
     spotify_url: document.getElementById('f-song-spotify').value.trim(),
-    comment: document.getElementById('f-song-comment').value.trim()
+    comment: document.getElementById('f-song-comment').value.trim(),
+    chord_source_url: normalizeCifraUrl(document.getElementById('f-song-cifra-url').value)
   };
 }
 
-function applyPendingChord(data){
-  if(!pendingChord) return;
-  data.chord_sheet = pendingChord.text;
-  data.chord_key = pendingChord.key || null;
-  data.chord_source_url = pendingChord.sourceUrl;
-  data.chord_updated_at = new Date().toISOString();
-  if(!data.song_key && pendingChord.key) data.song_key = pendingChord.key;
-}
 
 /* ============================================================
    CIFRAS (Cifra Club / editor / transposição) — ver cifra-ui.js
    ============================================================ */
-async function importCifraIntoForm(){
-  var input = document.getElementById('f-song-cifra-url');
-  var btn = document.getElementById('f-song-cifra-btn');
-  var status = document.getElementById('f-song-cifra-status');
-  if(!input || !window.CifraUI) return;
-  var url = input.value.trim();
-  if(!CifraUI.isCifraClubUrl(url)){ status.textContent = 'Cole um link do Cifra Club (cifraclub.com.br).'; status.style.color='var(--danger)'; return; }
-  btn.disabled = true; btn.textContent = 'Buscando…'; status.style.color=''; status.textContent = 'Buscando a cifra…';
+/** Normaliza o link do Cifra Club: aceita sem https, remove espaços. Devolve '' se vazio, null se inválido. */
+function normalizeCifraUrl(raw){
+  var v = (raw||'').trim();
+  if(!v) return '';
+  if(!/^https?:\/\//i.test(v)) v = 'https://' + v.replace(/^\/+/, '');
   try {
-    var res = await CifraUI.importFromUrl(url);
-    pendingChord = res;
-    var name = document.getElementById('f-song-name'), artist = document.getElementById('f-song-artist'), key = document.getElementById('f-song-key');
-    if(name && !name.value.trim() && res.title) name.value = res.title;
-    if(artist && !artist.value.trim() && res.artist) artist.value = res.artist;
-    if(key && res.key) key.value = res.key;
-    status.style.color = 'var(--success)';
-    status.textContent = 'Cifra encontrada'+(res.key?' (tom '+res.key+')':'')+'. Ela será salva junto com a música — depois é só tocar no ícone de cifra para editar ou mudar o tom.';
-  } catch(err){
-    pendingChord = null;
-    status.style.color = 'var(--danger)';
-    status.textContent = err.message || String(err);
-  } finally {
-    btn.disabled = false; btn.textContent = 'Buscar';
-  }
+    var u = new URL(v);
+    if(!/(^|\.)cifraclub\.com(\.br)?$/i.test(u.hostname)) return null;
+    u.protocol = 'https:';
+    return u.toString();
+  } catch(e){ return null; }
 }
 
 function findSongAnywhere(id){
@@ -750,9 +734,10 @@ function openChords(id){
 async function saveNewSong(){
   var data = readSongForm();
   if(!data.name) return;
+  if(data.chord_source_url === null){ toast('O link precisa ser do Cifra Club (cifraclub.com.br).', true); var cf=document.getElementById('f-song-cifra-url'); if(cf) cf.focus(); return; }
+  data.chord_source_url = data.chord_source_url || null;
   ui.busy = true; render();
   data.band_id = ui.bandId;
-  applyPendingChord(data);
   if(pendingSheetFile){
     try {
       var res = await uploadSheet(ui.bandId, pendingSheetFile);
@@ -762,7 +747,7 @@ async function saveNewSong(){
   var { error } = await sb.from('songs').insert(data);
   ui.busy = false;
   if(error){ toast('Não consegui salvar a música: '+errMsg(error), true); render(); return; }
-  ui.modal = null; pendingSheetFile = null; pendingChord = null;
+  ui.modal = null; pendingSheetFile = null;
   await loadBandData(ui.bandId);
   render();
   toast('Música adicionada.');
@@ -771,8 +756,9 @@ async function saveNewSong(){
 async function saveSongEdit(id){
   var data = readSongForm();
   if(!data.name) return;
+  if(data.chord_source_url === null){ toast('O link precisa ser do Cifra Club (cifraclub.com.br).', true); var cf=document.getElementById('f-song-cifra-url'); if(cf) cf.focus(); return; }
+  data.chord_source_url = data.chord_source_url || null;
   ui.busy = true; render();
-  applyPendingChord(data);
   if(pendingSheetFile){
     try {
       var res = await uploadSheet(ui.bandId, pendingSheetFile);
@@ -782,7 +768,7 @@ async function saveSongEdit(id){
   var { error } = await sb.from('songs').update(data).eq('id', id);
   ui.busy = false;
   if(error){ toast('Não consegui salvar: '+errMsg(error), true); render(); return; }
-  ui.modal = null; pendingSheetFile = null; pendingChord = null;
+  ui.modal = null; pendingSheetFile = null;
   await loadBandData(ui.bandId);
   render();
   toast('Música atualizada.');
@@ -990,8 +976,8 @@ document.addEventListener('click', function(e){
     case 'new-band': pendingLogoFile=null; ui.modal={type:'new-band'}; render(); break;
     case 'open-join-band': ui.modal={type:'join-band'}; render(); break;
     case 'tab': ui.tab=t.getAttribute('data-tab'); ui.search=''; stashNav(); render(); break;
-    case 'new-song': pendingSheetFile=null; pendingChord=null; ui.modal={type:'song', songId:null}; render(); break;
-    case 'edit-song': pendingSheetFile=null; pendingChord=null; ui.modal={type:'song', songId:t.getAttribute('data-id')}; render(); break;
+    case 'new-song': pendingSheetFile=null; ui.modal={type:'song', songId:null}; render(); break;
+    case 'edit-song': pendingSheetFile=null; ui.modal={type:'song', songId:t.getAttribute('data-id')}; render(); break;
     case 'delete-song': ui.modal={type:'confirm', title:'Excluir música', message:'Essa música será removida do catálogo e de qualquer setlist que a use.', onConfirm:function(){ deleteSong(t.getAttribute('data-id')); }}; render(); break;
     case 'new-show': ui.modal={type:'show', showId:null}; render(); break;
     case 'edit-show': ui.modal={type:'show', showId:ui.showId}; render(); break;
@@ -999,14 +985,13 @@ document.addEventListener('click', function(e){
     case 'open-show': ui.showId=t.getAttribute('data-id'); ui.search=''; render(); break;
     case 'close-show': ui.showId=null; ui.search=''; render(); break;
     case 'open-chords': e.preventDefault(); openChords(t.getAttribute('data-id')); break;
-    case 'import-cifra-form': importCifraIntoForm(); break;
     case 'open-sheet': e.preventDefault(); openSheet(t.getAttribute('data-path')); break;
     case 'export-pdf': exportSetlistPdf(t.getAttribute('data-id')); break;
     case 'add-to-set': addToSetlist(ui.showId, t.getAttribute('data-id')); break;
     case 'set-remove': ui.modal={type:'confirm', title:'Remover do setlist', message:'Remover essa música da ordem do show?', onConfirm:function(){ removeFromSetlist(t.getAttribute('data-rowid'), ui.showId); }}; render(); break;
     case 'set-move-up': moveSetlistItem(ui.showId, parseInt(t.getAttribute('data-idx'),10), -1); break;
     case 'set-move-down': moveSetlistItem(ui.showId, parseInt(t.getAttribute('data-idx'),10), 1); break;
-    case 'close-modal': ui.modal=null; pendingLogoFile=null; pendingSheetFile=null; pendingChord=null; ui.lastInviteCode=null; render(); break;
+    case 'close-modal': ui.modal=null; pendingLogoFile=null; pendingSheetFile=null; ui.lastInviteCode=null; render(); break;
     case 'modal-backdrop': if(e.target===t){ ui.modal=null; render(); } break;
     case 'confirm-yes': var m = ui.modal; ui.modal=null; render(); if(m && m.onConfirm) m.onConfirm(); break;
     case 'save-band-name': saveBandName(); break;
@@ -1019,11 +1004,17 @@ document.addEventListener('click', function(e){
   }
 });
 
-document.addEventListener('keydown', function(e){
-  if(e.key==='Enter' && e.target.id==='f-song-cifra-url'){ e.preventDefault(); importCifraIntoForm(); }
-});
-document.addEventListener('paste', function(e){
-  if(e.target.id==='f-song-cifra-url') setTimeout(function(){ if(window.CifraUI && CifraUI.isCifraClubUrl(e.target.value)) importCifraIntoForm(); }, 0);
+/* Link do Cifra Club no formulário: mostra/atualiza o botão "Abrir" enquanto digita */
+document.addEventListener('input', function(e){
+  if(e.target.id!=='f-song-cifra-url') return;
+  var a = document.getElementById('f-song-cifra-open');
+  var st = document.getElementById('f-song-cifra-status');
+  var url = normalizeCifraUrl(e.target.value);
+  if(a){ a.hidden = !url; if(url) a.href = url; }
+  if(st){
+    st.style.color = url===null ? 'var(--danger)' : '';
+    st.textContent = url===null ? 'Esse link não é do Cifra Club (cifraclub.com.br).' : 'Cole o link da música no Cifra Club. Ele vira um atalho na lista de músicas e no setlist.';
+  }
 });
 
 document.addEventListener('submit', function(e){

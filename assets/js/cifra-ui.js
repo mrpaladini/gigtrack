@@ -1,4 +1,4 @@
-/* GigTrack — tela de cifra (importar do Cifra Club, ver, editar, mudar o tom e salvar).
+/* GigTrack — tela de cifra (ver, editar/colar, mudar o tom, salvar; atalho para o Cifra Club).
  * Depende de cifra-core.js (window.CifraCore) e do cliente Supabase já criado pelo app.
  *
  * Uso no app.js:
@@ -34,6 +34,7 @@
   .cf-key select{font:inherit;font-family:var(--font-mono,'IBM Plex Mono',monospace);padding:6px 8px;border-radius:var(--radius-sm,6px);border:1px solid var(--border,rgba(0,0,0,.18));background:var(--surface,transparent);color:inherit}
   .cf-key .lbl{font-size:.8rem;color:var(--ink-soft,#5b5a63);text-transform:uppercase;letter-spacing:.06em}
   .cf-orig{font-size:.8rem;color:var(--ink-soft,#5b5a63)}
+  .cf-link{align-items:center}.cf-link a{text-decoration:none}
   .cf-body{flex:1;overflow:auto;min-height:240px}
   .cf-view{margin:0;padding:16px;font-family:var(--font-mono,'IBM Plex Mono',monospace);white-space:pre;line-height:1.45;font-size:var(--cf-size,15px);tab-size:4}
   .cf-view .chord{color:var(--accent,#b5720e);font-weight:700}
@@ -77,22 +78,6 @@
     try { var u = new URL(s.trim()); return /(^|\.)cifraclub\.com(\.br)?$/i.test(u.hostname); } catch (e) { return false; }
   }
 
-  /** Busca a cifra pelo endpoint /api/cifra.php (PHP na Hostinger) e já aplica o tom pedido no link (?key=). */
-  async function importFromUrl(url, apiBase) {
-    var endpoint = apiBase || (window.GIGTRACK_CONFIG && window.GIGTRACK_CONFIG.CIFRA_API) || '/api/cifra.php';
-    var r = await fetch(endpoint + '?url=' + encodeURIComponent(url.trim()), { headers: { 'Accept': 'application/json' } });
-    var data = {};
-    try { data = await r.json(); } catch (e) { /* resposta não-JSON */ }
-    if (!r.ok) throw new Error(data.error || 'Não foi possível importar a cifra (erro ' + r.status + ').');
-    var key = data.key || C.guessKey(data.text) || '';
-    var text = data.text;
-    if (data.requestedKey && key && C.semitonesBetween(key, data.requestedKey) !== 0) {
-      text = C.transposeToKey(text, key, data.requestedKey);
-      key = data.requestedKey;
-    }
-    return { title: data.title, artist: data.artist, originalKey: data.key || '', key: key, text: text, sourceUrl: data.sourceUrl || url };
-  }
-
   function open(opts) {
     injectCSS();
     var song = opts.song, sb = opts.supabase;
@@ -109,28 +94,14 @@
     var msg = el('div', { class: 'cf-msg', role: 'status' });
     function say(text, kind) { msg.textContent = text || ''; msg.className = 'cf-msg' + (kind ? ' ' + kind : ''); }
 
-    // --- importar
-    var urlInput = el('input', { type: 'url', placeholder: 'Cole o link do Cifra Club (ex.: cifraclub.com.br/artista/musica/)', value: state.sourceUrl, 'aria-label': 'Link do Cifra Club' });
-    var importBtn = el('button', { class: 'cf-btn primary', type: 'button', text: state.text ? 'Reimportar' : 'Importar' });
-    async function doImport() {
-      var url = urlInput.value;
-      if (!isCifraClubUrl(url)) { say('Cole um link do Cifra Club (cifraclub.com.br).', 'err'); return; }
-      if (state.text && state.dirty && !(await ask('Substituir a cifra atual pela importada? As edições não salvas serão perdidas.', 'Substituir'))) return;
-      importBtn.disabled = true; importBtn.textContent = 'Importando…'; say('');
-      try {
-        var res = await importFromUrl(url, opts.apiBase);
-        state.text = res.text; state.key = res.key; state.sourceUrl = res.sourceUrl; state.dirty = true;
-        say('Cifra importada' + (res.title ? ': ' + res.title + (res.artist ? ' — ' + res.artist : '') : '') + (res.key ? ' (tom ' + res.key + ')' : '') + '. Revise e toque em Salvar.', 'ok');
-        setTab('view');
-      } catch (e) {
-        say(e.message || String(e), 'err');
-      } finally {
-        importBtn.disabled = false; importBtn.textContent = state.text ? 'Reimportar' : 'Importar';
-      }
+    // --- link do Cifra Club (a cifra em si é colada/digitada na aba Editar)
+    var cifraLinkBar = null;
+    if (state.sourceUrl && isCifraClubUrl(state.sourceUrl)) {
+      cifraLinkBar = el('div', { class: 'cf-import cf-link' }, [
+        el('a', { class: 'cf-btn primary', href: state.sourceUrl, target: '_blank', rel: 'noopener', text: 'Abrir no Cifra Club ↗' }),
+        el('span', { class: 'cf-orig', text: 'Para salvar a cifra aqui, copie lá e cole na aba Editar.' })
+      ]);
     }
-    importBtn.addEventListener('click', doImport);
-    urlInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') doImport(); });
-    urlInput.addEventListener('paste', function () { setTimeout(function () { if (isCifraClubUrl(urlInput.value) && !state.text) doImport(); }, 0); });
 
     // --- abas, tom, fonte
     var tabView = el('button', { type: 'button', role: 'tab', text: 'Ver', onclick: function () { setTab('view'); } });
@@ -155,7 +126,6 @@
 
     // --- rodapé
     var updateSongKey = el('input', { type: 'checkbox', checked: 'checked' });
-    var sourceLink = el('a', { target: '_blank', rel: 'noopener' });
     var removeBtn = el('button', { class: 'cf-btn danger', type: 'button', text: 'Remover cifra', onclick: removeSheet });
     var cancelBtn = el('button', { class: 'cf-btn', type: 'button', text: 'Fechar', onclick: close });
     var saveBtn = el('button', { class: 'cf-btn primary', type: 'button', text: 'Salvar', onclick: save });
@@ -183,7 +153,7 @@
         el('div', { class: 'cf-title' }, [el('h2', { text: song.name || 'Cifra' }), el('small', { text: song.artist || '' })]),
         el('button', { class: 'cf-btn', type: 'button', 'aria-label': 'Fechar', text: '✕', onclick: close })
       ]),
-      el('div', { class: 'cf-import' }, [urlInput, importBtn]),
+      cifraLinkBar,
       msg,
       el('div', { class: 'cf-bar' }, [
         el('div', { class: 'cf-tabs', role: 'tablist' }, [tabView, tabEdit]),
@@ -195,7 +165,7 @@
       askBar,
       foot = el('div', { class: 'cf-foot' }, [
         el('label', {}, [updateSongKey, 'Usar este tom na música do setlist']),
-        sourceLink, removeBtn, cancelBtn, saveBtn
+        removeBtn, cancelBtn, saveBtn
       ])
     ]);
     var overlay = el('div', { class: 'cf-overlay' }, [modal]);
@@ -239,8 +209,6 @@
       origInfo.textContent = state.savedKey && k && state.savedKey !== k.name ? 'salva em ' + state.savedKey : '';
       saveBtn.disabled = !state.dirty;
       removeBtn.hidden = !song.chord_sheet;
-      if (state.sourceUrl) { sourceLink.href = state.sourceUrl; sourceLink.textContent = 'Ver original'; sourceLink.hidden = false; }
-      else sourceLink.hidden = true;
     }
 
     function setTab(t) {
@@ -262,7 +230,7 @@
       } else {
         body.appendChild(el('div', { class: 'cf-empty' }, [
           el('p', { text: 'Nenhuma cifra salva para esta música.' }),
-          el('p', { text: 'Cole um link do Cifra Club acima ou toque em Editar para digitar a sua.' })
+          el('p', { text: state.sourceUrl ? 'Abra no Cifra Club, copie a cifra e cole na aba Editar.' : 'Toque em Editar para colar ou digitar a cifra.' })
         ]));
       }
       syncKeyUI();
@@ -274,7 +242,6 @@
       var patch = {
         chord_sheet: state.text.trim() ? state.text : null,
         chord_key: state.text.trim() && k ? k.name : null,
-        chord_source_url: state.sourceUrl || null,
         chord_updated_at: new Date().toISOString()
       };
       if (updateSongKey.checked && k && state.text.trim()) patch.song_key = k.name;
@@ -290,11 +257,10 @@
 
     async function removeSheet() {
       if (!(await ask('Remover a cifra desta música?', 'Remover'))) return;
-      var res = await sb.from('songs').update({ chord_sheet: null, chord_key: null, chord_source_url: null, chord_updated_at: new Date().toISOString() }).eq('id', song.id).select().single();
+      var res = await sb.from('songs').update({ chord_sheet: null, chord_key: null, chord_updated_at: new Date().toISOString() }).eq('id', song.id).select().single();
       if (res.error) { say('Não foi possível remover: ' + res.error.message, 'err'); return; }
       Object.assign(song, res.data || {});
-      state.text = ''; state.key = song.song_key || ''; state.savedKey = ''; state.sourceUrl = ''; state.dirty = false;
-      urlInput.value = '';
+      state.text = ''; state.key = song.song_key || ''; state.savedKey = ''; state.dirty = false;
       say('Cifra removida.', 'ok');
       render();
       if (opts.onSaved) opts.onSaved(song);
@@ -309,10 +275,9 @@
 
     setSize(state.size);
     setTab('view');
-    if (!state.text) urlInput.focus();
     return { close: close };
   }
 
-  window.CifraUI = { open: open, importFromUrl: importFromUrl, isCifraClubUrl: isCifraClubUrl };
+  window.CifraUI = { open: open, isCifraClubUrl: isCifraClubUrl };
 })();
 

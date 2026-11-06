@@ -21,9 +21,6 @@ ServerSignature Off
   RewriteRule ^(supabase|docs|tests|\.github|\.git)(/|$) - [F,L,NC]
   RewriteRule (^|/)(README|CHANGELOG|LICENSE)(\.md)?$ - [F,L,NC]
   RewriteRule (^|/)(package(-lock)?\.json|composer\.(json|lock)|\.gitignore|\.gitattributes|\.editorconfig|[^/]+\.(bat|sh|py))$ - [F,L,NC]
-
-  # 4) Endereço antigo da API (/api/cifra) continua funcionando
-  RewriteRule ^api/cifra/?$ api/cifra.php [L,QSA]
 </IfModule>
 
 # Arquivos ocultos (.env, .git, etc.)

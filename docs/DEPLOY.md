@@ -45,8 +45,6 @@ Se o repositório no GitHub já tiver algum arquivo (um README criado pelo site,
 
 *Websites → gigtrack.com.br → Painel*
 
-- **PHP**: *Avançado → Configuração PHP* → versão **8.1 ou mais nova** (8.3 recomendado).
-  As extensões `curl` e `dom` já vêm ativas na Hostinger.
 - **SSL**: *Segurança → SSL* → instale o certificado gratuito para `gigtrack.com.br` e
   `www.gigtrack.com.br`. (O `.htaccess` já força HTTPS e redireciona `www` para o domínio sem `www`.)
 
@@ -93,14 +91,10 @@ para mencionar "GigTrack".
 2. `http://gigtrack.com.br` e `https://www.gigtrack.com.br` devem redirecionar para
    `https://gigtrack.com.br`.
 3. Crie uma conta, confirme pelo e-mail, crie uma banda, uma música e um show; gere o PDF.
-4. Na música, cole um link do Cifra Club (ex.: `https://www.cifraclub.com.br/legiao-urbana/tempo-perdido/`)
-   e clique em **Buscar** — nome, artista, tom e cifra devem ser preenchidos.
-5. Teste rápido da API: abra
-   `https://gigtrack.com.br/api/cifra.php?url=https://www.cifraclub.com.br/legiao-urbana/tempo-perdido/`
-   — deve aparecer um JSON com `title`, `artist`, `key` e `text`.
-6. Bloqueios: `https://gigtrack.com.br/supabase/` e `https://gigtrack.com.br/README.md` devem dar
+4. Numa música, cole o link do Cifra Club, salve e confira o atalho "Cifra Club" na lista.
+5. Bloqueios: `https://gigtrack.com.br/supabase/` e `https://gigtrack.com.br/README.md` devem dar
    *403 Forbidden*.
-7. No celular: abra o site no Chrome (Android) → menu → *Instalar app*; no iPhone, Safari →
+6. No celular: abra o site no Chrome (Android) → menu → *Instalar app*; no iPhone, Safari →
    *Compartilhar → Adicionar à Tela de Início*.
 
 ## Problemas comuns
@@ -109,8 +103,6 @@ para mencionar "GigTrack".
 | --- | --- |
 | "Configuração pendente" na tela | `assets/js/config.js` sem URL/chave do Supabase |
 | Página em branco, erro de CSP no console | Algum script novo vindo de outro domínio: libere no `Content-Security-Policy` do `.htaccess` |
-| Importar cifra dá erro 502 | O Cifra Club recusou ou demorou; tente de novo ou cole a cifra na aba *Editar* |
-| Importar cifra dá erro 500 | PHP abaixo de 8.1 — ajuste em *Configuração PHP* |
 | Confirmação de e-mail abre `localhost` ou endereço antigo | Passo 4 (URLs no Supabase) |
 | Deploy do Git falha na primeira vez | `public_html` não estava vazia (passo 3.2) |
 | Mudança no CSS/JS não aparece no celular | Aumente o `?v=` dos arquivos no `index.html` |
