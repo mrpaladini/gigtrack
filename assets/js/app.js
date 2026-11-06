@@ -29,6 +29,8 @@ function icon(name){
     key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
     users:'<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><path d="M17 9a3 3 0 1 0 0-6"/><path d="M22 20c0-2.5-1.7-4.3-4-4.9"/>',
     logout:'<path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/>',
+    shield:'<path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6Z"/><path d="M9 12l2 2 4-4"/>',
     copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
   }[name] || '';
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+p+'</svg>';
@@ -97,7 +99,7 @@ function initSupabase(){
 /* ============================================================
    STATE
    ============================================================ */
-var session = null, profile = null;
+var session = null, profile = null, isAdmin = false;
 var NAV_KEY = 'gigtrack_nav_v1';
 function restoreNav(){
   try { var raw = localStorage.getItem(NAV_KEY); if(raw) return JSON.parse(raw); } catch(e){}
@@ -119,7 +121,7 @@ var ui = {
   modal: null,
   busy: false
 };
-var cache = { bands: [], members: [], songs: [], shows: [], showSongs: {}, signedUrls: {} };
+var cache = { bands: [], members: [], songs: [], shows: [], showSongs: {}, signedUrls: {}, adminUsers: [] };
 var pendingLogoFile = null, pendingSheetFile = null;
 
 /* ============================================================
@@ -157,8 +159,13 @@ function renderScreen(){
   if(!configOk) return renderSetupNeeded();
   if(ui.screen === 'loading') return '<div class="centerscreen"><div class="spinner" role="status" aria-label="Carregando"></div><p>Carregando GigTrack…</p></div>';
   if(ui.screen === 'auth') return renderAuth();
+  if(profile && profile.must_change_password) return renderForcePassword();
   var band = ui.bandId ? cache.bands.find(function(b){ return b.id===ui.bandId; }) : null;
   var body;
+  if(ui.screen === 'admin' && isAdmin){
+    return renderTopbar(null, 'admin') + '<main class="main" id="main">' + renderAdmin() + '</main>' +
+      (ui.modal ? renderModal() : '') + '<div class="toastwrap" id="toastwrap"></div>';
+  }
   if(!band){
     body = renderBandList();
   } else if(ui.showId){
@@ -192,7 +199,9 @@ function renderAuth(){
     '<form id="auth-form" class="authform">' +
     (ui.authError ? '<div class="err">'+escapeHtml(ui.authError)+'</div>' : '') +
     (isLogin ? '' : '<div class="field"><label class="u-label">Seu nome</label><input type="text" id="f-auth-name" placeholder="Como a banda vai te ver" required></div>') +
-    '<div class="field"><label class="u-label">E-mail</label><input type="email" id="f-auth-email" required autocomplete="email"></div>' +
+    (isLogin
+      ? '<div class="field"><label class="u-label">E-mail ou usuário</label><input type="text" id="f-auth-email" required autocomplete="username" autocapitalize="off" spellcheck="false"></div>'
+      : '<div class="field"><label class="u-label">E-mail</label><input type="email" id="f-auth-email" required autocomplete="email"></div>') +
     '<div class="field"><label class="u-label">Senha</label><input type="password" id="f-auth-pass" required minlength="6" autocomplete="'+(isLogin?'current-password':'new-password')+'"></div>' +
     '<button type="submit" class="btn btn-primary btn-block" '+(ui.authBusy?'disabled':'')+'>' +
     (ui.authBusy ? 'Só um instante…' : (isLogin ? 'Entrar' : 'Criar conta')) + '</button>' +
@@ -202,9 +211,12 @@ function renderAuth(){
 /* ============================================================
    TOPBAR
    ============================================================ */
-function renderTopbar(band){
+function renderTopbar(band, mode){
   var crumb;
-  if(!band){
+  if(mode === 'admin'){
+    crumb = '<button class="iconbtn" data-action="close-admin" aria-label="Voltar para minhas bandas">'+icon('back')+'</button>' +
+      '<div class="crumb"><span class="name">'+icon('shield')+' Administração</span></div>';
+  } else if(!band){
     crumb = '<div class="crumb"><span class="brand"><span class="dot"></span>GigTrack</span></div>';
   } else {
     crumb = '<button class="iconbtn" data-action="go-home" aria-label="Voltar para minhas bandas">'+icon('back')+'</button>' +
@@ -213,7 +225,9 @@ function renderTopbar(band){
       '<span class="name">'+escapeHtml(band.name)+'</span></div>';
   }
   var who = profile ? '<span class="userchip"><span class="uname">'+escapeHtml(profile.display_name||'')+'</span>'+
-    '<button class="iconbtn" data-action="logout" aria-label="Sair da conta">'+icon('logout')+'</button></span>' : '';
+    (isAdmin && mode !== 'admin' ? '<button class="iconbtn" data-action="open-admin" aria-label="Administração" title="Administração">'+icon('shield')+'</button>' : '') +
+    '<button class="iconbtn" data-action="open-account" aria-label="Minha conta" title="Minha conta">'+icon('key')+'</button>' +
+    '<button class="iconbtn" data-action="logout" aria-label="Sair da conta" title="Sair">'+icon('logout')+'</button></span>' : '';
   return '<header class="topbar">' + crumb + '<span class="spacer"></span>' + who + '</header>';
 }
 function bandLogoUrl(band){
@@ -259,6 +273,7 @@ function renderSongsTab(band){
   });
   var toolbar = '<div class="toolbar">' +
     '<div class="search">'+icon('search')+'<input type="text" placeholder="Buscar música ou artista" value="'+escapeHtml(ui.search||'')+'" data-action="search" aria-label="Buscar música"></div>' +
+    '<button class="btn" data-action="open-public-lib">'+icon('globe')+'Músicas públicas</button>' +
     '<button class="btn btn-primary" data-action="new-song">'+icon('plus')+'Nova música</button>' +
     '</div>';
   if(!songs.length){
@@ -273,12 +288,14 @@ function renderSongsTab(band){
     if(sg.chord_source_url) links += '<a class="pill pill-cifraclub" href="'+escapeHtml(sg.chord_source_url)+'" target="_blank" rel="noopener">'+icon('external')+'Cifra Club</a>';
     if(sg.chord_sheet) links += '<a class="pill" href="#" data-action="open-chords" data-id="'+sg.id+'">'+icon('music')+'Cifra'+(sg.chord_key?' · '+escapeHtml(sg.chord_key):'')+'</a>';
     if(sg.comment) links += '<span class="pill">'+icon('comment')+'Nota</span>';
+    if(sg.is_public) links += '<span class="pill pill-public">'+icon('globe')+'Pública</span>';
     return '<div class="songrow">' +
       '<div class="keybadge">'+escapeHtml(sg.song_key||'—')+'</div>' +
       '<div class="info"><div class="title">'+escapeHtml(sg.name)+'</div>' +
       '<div class="sub"><span class="dur mono">'+fmtDuration(sg.duration_sec)+'</span>'+escapeHtml(sg.artist||'Artista não informado')+'</div>' +
       (links ? '<div class="links">'+links+'</div>' : '') + '</div>' +
       '<div class="rowactions"><button class="iconbtn" data-action="open-chords" data-id="'+sg.id+'" aria-label="Cifra" title="Cifra">'+icon('music')+'</button>' +
+      '<button class="iconbtn" data-action="copy-song" data-id="'+sg.id+'" aria-label="Copiar para outra banda" title="Copiar para outra banda">'+icon('copy')+'</button>' +
       '<button class="iconbtn" data-action="edit-song" data-id="'+sg.id+'" aria-label="Editar música">'+icon('edit')+'</button>' +
       '<button class="iconbtn btn-danger" data-action="delete-song" data-id="'+sg.id+'" aria-label="Excluir música">'+icon('trash')+'</button></div>' +
       '</div>';
@@ -406,19 +423,31 @@ function renderModal(){
   if(m.type==='song') return modalWrap(m.songId ? 'Editar música' : 'Nova música', songFormBody(m.songId ? getSong(m.songId) : null), m.songId ? 'save-song-edit' : 'save-song-new', m.songId);
   if(m.type==='show') return modalWrap(m.showId ? 'Editar show' : 'Novo show', showFormBody(m.showId ? getShow(m.showId) : null), m.showId ? 'save-show-edit' : 'save-show-new', m.showId);
   if(m.type==='confirm') return confirmWrap(m);
+  if(m.type==='account') return modalWrap('Minha conta', accountBody(), 'save-account', null, 'Trocar senha');
+  if(m.type==='reset-pw'){
+    var ru = (cache.adminUsers||[]).find(function(x){ return x.id===m.userId; });
+    return ru ? modalWrap('Redefinir senha', resetPwBody(ru), 'save-reset-pw', m.userId, 'Redefinir') : '';
+  }
+  if(m.type==='reset-done') return resetDoneWrap(m);
+  if(m.type==='copy-song'){
+    var cs = getSong(m.songId);
+    var hasOthers = cache.bands.some(function(b){ return cs && b.id !== cs.band_id; });
+    return cs ? modalWrap('Copiar para outra banda', copySongBody(cs), hasOthers ? 'save-copy-song' : 'close-modal', m.songId, hasOthers ? 'Copiar' : 'OK') : '';
+  }
+  if(m.type==='public-lib') return publicLibWrap(m);
   return '';
 }
 function getSong(id){ return cache.songs.find(function(s){ return s.id===id; }); }
 function getShow(id){ return cache.shows.find(function(s){ return s.id===id; }); }
 
-function modalWrap(title, bodyHtml, saveAction, entityId){
+function modalWrap(title, bodyHtml, saveAction, entityId, saveLabel){
   return '<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-label="'+escapeHtml(title)+'">' +
     '<div class="modal-head"><h2>'+escapeHtml(title)+'</h2>' +
     '<button class="iconbtn" data-action="close-modal" aria-label="Fechar">'+icon('close')+'</button></div>' +
     '<form id="modal-form">' +
     '<div class="modal-body">' + bodyHtml + '</div>' +
     '<div class="modal-foot"><button type="button" class="btn" data-action="close-modal">Cancelar</button>' +
-    '<button type="submit" class="btn btn-primary" data-action="'+saveAction+'" '+(entityId?'data-id="'+entityId+'"':'')+' '+(ui.busy?'disabled':'')+'>'+icon('check')+(ui.busy?'Salvando…':'Salvar')+'</button></div>' +
+    '<button type="submit" class="btn btn-primary" data-action="'+saveAction+'" '+(entityId?'data-id="'+entityId+'"':'')+' '+(ui.busy?'disabled':'')+'>'+icon('check')+(ui.busy?'Salvando…':(saveLabel||'Salvar'))+'</button></div>' +
     '</form></div></div>';
 }
 
@@ -464,6 +493,8 @@ function songFormBody(song){
     '<div class="fname" id="f-song-sheet-name">'+(sheetLabel ? escapeHtml(sheetLabel)+' (trocar arquivo)' : 'Toque para enviar .txt, .pdf ou .docx')+'</div>' +
     '<input type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" id="f-song-sheet"></label>' +
     '<div class="hint">Máximo de 10 MB por arquivo.</div></div>' +
+    '<label class="checkrow switchrow"><input type="checkbox" id="f-song-public"'+(song.is_public?' checked':'')+'>' +
+    '<span><strong>Música pública</strong><br><span class="hint" style="margin:0;">Outros usuários do GigTrack podem ver e copiar esta música (sem o comentário e sem o arquivo anexo).</span></span></label>' +
     '<div class="field"><label class="u-label">Comentário</label>' +
     '<textarea id="f-song-comment" placeholder="Observações de arranjo, intro, quem canta...">'+escapeHtml(song.comment||'')+'</textarea></div>';
 }
@@ -497,6 +528,8 @@ async function loadProfile(){
   var { data, error } = await sb.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if(error){ toast('Não consegui carregar seu perfil: '+errMsg(error), true); return; }
   profile = data || { id: session.user.id, display_name: session.user.email.split('@')[0] };
+  var adm = await sb.rpc('is_app_admin');
+  isAdmin = !adm.error && adm.data === true;
 }
 
 async function loadBands(){
@@ -547,6 +580,8 @@ async function prefetchSignedUrls(paths){
    AUTH ACTIONS
    ============================================================ */
 async function doLogin(email, pass){
+  // usuários sem e-mail (ex.: gigadmin) entram pelo nome de usuário
+  if(email && email.indexOf('@') < 0) email = email.trim().toLowerCase() + '@gigtrack.com.br';
   ui.authBusy = true; ui.authError=''; render();
   var { error } = await sb.auth.signInWithPassword({ email: email, password: pass });
   ui.authBusy = false;
@@ -561,17 +596,17 @@ async function doSignup(email, pass, name){
   if(data && data.user && !data.session){
     ui.authError = '';
     ui.authTab = 'login';
-    toast('Conta criada! Verifique seu e-mail para confirmar antes de entrar.');
+    toast('Conta criada! Agora é só entrar com seu e-mail e senha.');
     render();
     return;
   }
 }
 function translateAuthError(error){
   var msg = errMsg(error);
-  if(/invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
+  if(/invalid login credentials/i.test(msg)) return 'Usuário/e-mail ou senha incorretos.';
   if(/user already registered/i.test(msg)) return 'Já existe uma conta com esse e-mail.';
   if(/password should be at least/i.test(msg)) return 'A senha precisa ter pelo menos 6 caracteres.';
-  if(/email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar (veja sua caixa de entrada).';
+  if(/email not confirmed/i.test(msg)) return 'Essa conta ainda não foi liberada. Peça para um administrador do GigTrack redefinir sua senha.';
   return msg;
 }
 async function doLogout(){
@@ -684,7 +719,8 @@ function readSongForm(){
     youtube_url: document.getElementById('f-song-youtube').value.trim(),
     spotify_url: document.getElementById('f-song-spotify').value.trim(),
     comment: document.getElementById('f-song-comment').value.trim(),
-    chord_source_url: normalizeCifraUrl(document.getElementById('f-song-cifra-url').value)
+    chord_source_url: normalizeCifraUrl(document.getElementById('f-song-cifra-url').value),
+    is_public: !!(document.getElementById('f-song-public')||{}).checked
   };
 }
 
@@ -961,6 +997,258 @@ function exportSetlistPdf(showId){
 }
 
 /* ============================================================
+   CONTA: troca de senha (própria e obrigatória após reset)
+   ============================================================ */
+function passwordFields(prefix){
+  return '<div class="field"><label class="u-label" for="'+prefix+'-new">Nova senha</label>' +
+    '<input type="password" id="'+prefix+'-new" required minlength="8" autocomplete="new-password"></div>' +
+    '<div class="field"><label class="u-label" for="'+prefix+'-again">Repita a nova senha</label>' +
+    '<input type="password" id="'+prefix+'-again" required minlength="8" autocomplete="new-password">' +
+    '<div class="hint">Mínimo de 8 caracteres.</div></div>';
+}
+function renderForcePassword(){
+  return '<div class="authwrap"><div class="authcard">' +
+    '<div class="brand"><span class="dot"></span>GigTrack</div>' +
+    '<p class="tagline">Olá, '+escapeHtml((profile&&profile.display_name)||'')+'! Sua senha foi redefinida. Crie uma senha nova para continuar.</p>' +
+    '<form id="pw-form" class="authform">' +
+    (ui.authError ? '<div class="err">'+escapeHtml(ui.authError)+'</div>' : '') +
+    passwordFields('f-pw') +
+    '<button type="submit" class="btn btn-primary btn-block" '+(ui.authBusy?'disabled':'')+'>'+(ui.authBusy?'Salvando…':'Salvar nova senha')+'</button>' +
+    '<button type="button" class="btn btn-ghost btn-block" data-action="logout">Sair</button>' +
+    '</form></div></div>' + '<div class="toastwrap" id="toastwrap"></div>';
+}
+function readPasswordPair(prefix){
+  var a = (document.getElementById(prefix+'-new')||{}).value || '';
+  var b = (document.getElementById(prefix+'-again')||{}).value || '';
+  if(a.length < 8) return { error: 'A senha precisa ter pelo menos 8 caracteres.' };
+  if(a !== b) return { error: 'As duas senhas não são iguais.' };
+  return { password: a };
+}
+async function changeOwnPassword(prefix, forced){
+  var r = readPasswordPair(prefix);
+  if(r.error){ if(forced){ ui.authError = r.error; render(); } else toast(r.error, true); return; }
+  if(forced){ ui.authBusy = true; ui.authError=''; render(); } else { ui.busy = true; render(); }
+  var { error } = await sb.auth.updateUser({ password: r.password });
+  if(!error){
+    var res = await sb.from('profiles').update({ must_change_password: false }).eq('id', session.user.id);
+    error = res.error;
+  }
+  ui.authBusy = false; ui.busy = false;
+  if(error){
+    var msg = /different from the old/i.test(errMsg(error)) ? 'A nova senha precisa ser diferente da atual.' : 'Não consegui trocar a senha: '+errMsg(error);
+    if(forced){ ui.authError = msg; render(); } else { toast(msg, true); render(); }
+    return;
+  }
+  if(profile) profile.must_change_password = false;
+  ui.modal = null; ui.authError = '';
+  if(forced){ await loadBands(); if(ui.bandId) await loadBandData(ui.bandId); }
+  render();
+  toast('Senha alterada.');
+}
+function accountBody(){
+  return '<div class="field"><label class="u-label">Conta</label><div class="hint" style="margin:0;">'+
+    escapeHtml((profile&&profile.display_name)||'')+' · '+escapeHtml(loginLabel(session.user.email))+(isAdmin?' · administrador':'')+'</div></div>' +
+    passwordFields('f-acc');
+}
+function loginLabel(email){
+  return /@gigtrack\.com\.br$/i.test(email||'') ? (email.split('@')[0] + ' (usuário)') : (email||'');
+}
+
+/* ============================================================
+   ÁREA ADMINISTRATIVA (só grupo admins)
+   ============================================================ */
+async function loadAdminUsers(){
+  var { data, error } = await sb.rpc('admin_list_users');
+  if(error){ toast('Não consegui carregar os usuários: '+errMsg(error), true); cache.adminUsers = []; return; }
+  cache.adminUsers = data || [];
+}
+function fmtDateTime(iso){
+  if(!iso) return 'nunca';
+  var d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+}
+function renderAdmin(){
+  var q = (ui.search||'').toLowerCase();
+  var users = (cache.adminUsers||[]).filter(function(u){
+    return !q || (u.email||'').toLowerCase().indexOf(q)>-1 || (u.display_name||'').toLowerCase().indexOf(q)>-1;
+  });
+  var total = (cache.adminUsers||[]).length, admins = (cache.adminUsers||[]).filter(function(u){return u.is_admin;}).length;
+  var rows = users.map(function(u){
+    var me = u.id === session.user.id;
+    return '<div class="userrow">' +
+      '<div class="uinfo"><div class="uname2">'+escapeHtml(u.display_name||'—')+(me?' <span class="muted">(você)</span>':'')+'</div>' +
+      '<div class="uemail">'+escapeHtml(loginLabel(u.email))+'</div>' +
+      '<div class="umeta">Criado em '+fmtDateTime(u.created_at)+' · Último acesso: '+fmtDateTime(u.last_sign_in_at)+' · '+u.band_count+' banda'+(u.band_count===1?'':'s')+'</div>' +
+      '<div class="ubadges">'+(u.is_admin?'<span class="badge badge-admin">'+icon('shield')+'Admin</span>':'')+
+        (u.must_change_password?'<span class="badge badge-warn">Troca de senha pendente</span>':'')+'</div></div>' +
+      '<div class="uactions">' +
+      '<button class="btn" data-action="admin-reset" data-id="'+u.id+'">'+icon('key')+'Redefinir senha</button>' +
+      (me ? '' : (u.is_admin
+        ? '<button class="btn btn-danger" data-action="admin-unset" data-id="'+u.id+'">'+icon('shield')+'Tirar admin</button>'
+        : '<button class="btn" data-action="admin-set" data-id="'+u.id+'">'+icon('shield')+'Tornar admin</button>')) +
+      '</div></div>';
+  }).join('') || '<div class="empty"><p>Nenhum usuário encontrado.</p></div>';
+  return '<div class="hero"><h1>Administração</h1><p>'+total+' usuário'+(total===1?'':'s')+' · '+admins+' administrador'+(admins===1?'':'es')+'. Redefina senhas e gerencie quem é admin.</p></div>' +
+    '<div class="toolbar"><div class="search">'+icon('search')+'<input type="text" placeholder="Buscar por nome ou e-mail" value="'+escapeHtml(ui.search||'')+'" data-action="search" aria-label="Buscar usuário"></div>' +
+    '<button class="btn" data-action="admin-refresh">'+icon('users')+'Atualizar</button></div>' +
+    '<div class="userlist">'+rows+'</div>';
+}
+function genPassword(){
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  var out = '', arr = new Uint32Array(10);
+  (window.crypto||window.msCrypto).getRandomValues(arr);
+  for(var i=0;i<arr.length;i++) out += chars[arr[i] % chars.length];
+  return out.slice(0,4) + '-' + out.slice(4,8) + '#' + out.slice(8);
+}
+function resetPwBody(u){
+  return '<p class="muted" style="margin:0;">Nova senha temporária para <strong>'+escapeHtml(u.display_name||u.email)+'</strong> ('+escapeHtml(loginLabel(u.email))+'). '+
+    (u.id===session.user.id ? 'É a sua própria conta.' : 'A pessoa vai precisar criar uma senha nova no próximo login, e as sessões abertas dela serão encerradas.')+'</p>' +
+    '<div class="field"><label class="u-label" for="f-reset-pw">Senha temporária</label>' +
+    '<div class="cifraimport"><input type="text" id="f-reset-pw" required minlength="8" autocomplete="off" spellcheck="false" value="'+escapeHtml(genPassword())+'">' +
+    '<button type="button" class="btn" data-action="admin-gen-pw">Gerar outra</button></div>' +
+    '<div class="hint">Mínimo de 8 caracteres. Depois de salvar, copie e envie para a pessoa.</div></div>';
+}
+function resetDoneWrap(m){
+  return '<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal confirmbox" role="dialog" aria-modal="true" aria-label="Senha redefinida">' +
+    '<div class="modal-head"><h2>Senha redefinida</h2><button class="iconbtn" data-action="close-modal" aria-label="Fechar">'+icon('close')+'</button></div>' +
+    '<div class="modal-body"><p class="muted" style="margin:0;">Envie para <strong>'+escapeHtml(m.who)+'</strong>:</p>' +
+    '<div class="invitebox"><span class="code mono" style="letter-spacing:.04em;font-size:1.1rem;">'+escapeHtml(m.password)+'</span>' +
+    '<button class="iconbtn" data-action="copy-text" data-text="'+escapeHtml(m.password)+'" aria-label="Copiar senha">'+icon('copy')+'</button></div>' +
+    '<div class="hint">Login: '+escapeHtml(loginLabel(m.email))+'. Essa senha não aparece de novo.</div></div>' +
+    '<div class="modal-foot"><button class="btn btn-primary" data-action="close-modal">'+icon('check')+'Pronto</button></div></div></div>';
+}
+async function adminResetPassword(userId){
+  var u = (cache.adminUsers||[]).find(function(x){ return x.id===userId; });
+  var pw = (document.getElementById('f-reset-pw')||{}).value || '';
+  if(pw.length < 8){ toast('A senha precisa ter pelo menos 8 caracteres.', true); return; }
+  ui.busy = true; render();
+  var { error } = await sb.rpc('admin_reset_password', { p_user_id: userId, p_new_password: pw });
+  ui.busy = false;
+  if(error){ toast('Não consegui redefinir: '+errMsg(error), true); render(); return; }
+  ui.modal = { type:'reset-done', password: pw, who: (u && (u.display_name||u.email)) || '', email: u && u.email };
+  await loadAdminUsers();
+  render();
+}
+async function adminSetAdmin(userId, makeAdmin){
+  var { error } = await sb.rpc('admin_set_admin', { p_user_id: userId, p_admin: makeAdmin });
+  if(error){ toast(errMsg(error), true); return; }
+  await loadAdminUsers();
+  render();
+  toast(makeAdmin ? 'Agora é administrador.' : 'Não é mais administrador.');
+}
+async function openAdmin(){
+  if(!isAdmin) return;
+  ui.screen = 'admin'; ui.showId = null; ui.search = ''; ui.modal = null;
+  render();
+  await loadAdminUsers();
+  if(ui.screen === 'admin') render();
+}
+
+/* ============================================================
+   COPIAR MÚSICA PARA OUTRAS BANDAS
+   ============================================================ */
+function copySongBody(song){
+  var others = cache.bands.filter(function(b){ return b.id !== song.band_id; });
+  if(!others.length){
+    return '<p class="muted" style="margin:0;">Você só participa desta banda. Crie outra banda ou entre em uma com código de convite para copiar músicas entre elas.</p>';
+  }
+  var copiedIn = function(bandId){
+    return cache.songs.some(function(s){ return s.band_id===bandId && (s.copied_from===song.id || (song.copied_from && s.id===song.copied_from)); });
+  };
+  return '<p class="muted" style="margin:0;">Copiar <strong>'+escapeHtml(song.name)+'</strong> com tom, duração, links, cifra e anexo. Cada banda fica com a sua cópia, que pode ser editada sem mexer na outra.</p>' +
+    '<div class="field"><label class="u-label">Para as bandas</label><div class="checklist">' +
+    others.map(function(b){
+      return '<label class="checkrow"><input type="checkbox" name="copy-band" value="'+b.id+'">' +
+        '<span>'+escapeHtml(b.name)+(copiedIn(b.id)?' <span class="muted">(já tem uma cópia)</span>':'')+'</span></label>';
+    }).join('') + '</div></div>';
+}
+async function copySongToBands(songId){
+  var song = getSong(songId);
+  var targets = [].map.call(document.querySelectorAll('input[name="copy-band"]:checked'), function(i){ return i.value; });
+  if(!song || !targets.length){ toast('Escolha pelo menos uma banda.', true); return; }
+  ui.busy = true; render();
+  var ok = 0, fails = [];
+  for(var i=0;i<targets.length;i++){
+    var { data, error } = await sb.rpc('copy_song_to_band', { p_song_id: songId, p_band_id: targets[i] });
+    if(error){ fails.push(errMsg(error)); continue; }
+    ok++;
+    if(song.sheet_path && data && data.id){
+      try {
+        var dest = targets[i] + '/sheets/' + uid() + '-' + (song.sheet_name || 'arquivo').replace(/[^A-Za-z0-9._-]+/g,'_');
+        var cp = await sb.storage.from('band-files').copy(song.sheet_path, dest);
+        if(!cp.error) await sb.from('songs').update({ sheet_path: dest, sheet_name: song.sheet_name }).eq('id', data.id);
+      } catch(e){ /* a música foi copiada; só o anexo ficou de fora */ }
+    }
+  }
+  ui.busy = false; ui.modal = null;
+  for(var j=0;j<targets.length;j++) await loadBandData(targets[j]);
+  if(ui.bandId) await loadBandData(ui.bandId);
+  render();
+  if(ok) toast('Música copiada para '+ok+' banda'+(ok===1?'':'s')+'.');
+  if(fails.length) toast('Não consegui copiar: '+fails[0], true);
+}
+
+/* ============================================================
+   BIBLIOTECA DE MÚSICAS PÚBLICAS
+   ============================================================ */
+function publicLibWrap(m){
+  return '<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal modal-wide" role="dialog" aria-modal="true" aria-label="Músicas públicas">' +
+    '<div class="modal-head"><h2>Músicas públicas</h2><button class="iconbtn" data-action="close-modal" aria-label="Fechar">'+icon('close')+'</button></div>' +
+    '<div class="modal-body">' +
+    '<p class="muted" style="margin:0;">Músicas que outros usuários do GigTrack deixaram públicas. Copie para a sua banda e ela vira sua — dá para editar à vontade.</p>' +
+    '<div class="search">'+icon('search')+'<input type="text" id="f-pub-search" placeholder="Buscar por música ou artista" value="'+escapeHtml(m.query||'')+'" aria-label="Buscar músicas públicas"></div>' +
+    '<div id="pub-results" class="publist">'+renderPublicResults(m)+'</div>' +
+    '</div></div></div>';
+}
+function renderPublicResults(m){
+  if(m.loading) return '<div class="centerscreen" style="min-height:8rem;"><div class="spinner" role="status" aria-label="Carregando"></div></div>';
+  if(m.error) return '<p class="hint" style="color:var(--danger)">'+escapeHtml(m.error)+'</p>';
+  var list = m.results || [];
+  if(!list.length) return '<div class="empty" style="padding:1.5rem 1rem;">'+icon('globe')+'<p>'+(m.query?'Nada encontrado para "'+escapeHtml(m.query)+'".':'Ainda não há músicas públicas.')+'</p></div>';
+  var here = cache.songs.filter(function(s){ return s.band_id===ui.bandId; });
+  return list.map(function(p){
+    var inBand = p.band_id === ui.bandId;
+    var copied = here.some(function(s){ return s.copied_from === p.id; });
+    var btn = inBand ? '<span class="pill">Desta banda</span>'
+      : copied ? '<span class="pill">'+icon('check')+'Já copiada</span>'
+      : '<button class="btn btn-primary" data-action="copy-public" data-id="'+p.id+'">'+icon('copy')+'Copiar</button>';
+    var bits = [];
+    if(p.song_key) bits.push('Tom '+escapeHtml(p.song_key));
+    if(p.duration_sec) bits.push(fmtDuration(p.duration_sec));
+    if(p.has_chords) bits.push('com cifra');
+    return '<div class="pubrow"><div class="pinfo"><div class="title">'+escapeHtml(p.name)+'</div>' +
+      '<div class="sub">'+escapeHtml(p.artist||'Artista não informado')+(bits.length?' · '+bits.join(' · '):'')+'</div>' +
+      '<div class="umeta">Compartilhada por '+escapeHtml(p.shared_by||'alguém')+' · '+escapeHtml(p.band_name||'')+
+      (p.chord_source_url?' · <a href="'+escapeHtml(p.chord_source_url)+'" target="_blank" rel="noopener">Cifra Club</a>':'')+'</div></div>' +
+      '<div class="pact">'+btn+'</div></div>';
+  }).join('');
+}
+function refreshPublicResults(){
+  var box = document.getElementById('pub-results');
+  if(box && ui.modal && ui.modal.type==='public-lib') box.innerHTML = renderPublicResults(ui.modal);
+}
+async function loadPublicSongs(query){
+  var m = ui.modal;
+  if(!m || m.type!=='public-lib') return;
+  m.query = query; m.loading = true; m.error = ''; refreshPublicResults();
+  var seq = (m.seq = (m.seq||0) + 1);
+  var { data, error } = await sb.rpc('list_public_songs', { p_query: query || '' });
+  if(ui.modal !== m || seq !== m.seq) return;
+  m.loading = false;
+  if(error) m.error = 'Não consegui carregar: '+errMsg(error); else m.results = data || [];
+  refreshPublicResults();
+}
+var onPublicSearch = debounce(function(v){ loadPublicSongs(v); }, 250);
+async function copyPublicSong(songId, btn){
+  if(btn){ btn.disabled = true; btn.textContent = 'Copiando…'; }
+  var { error } = await sb.rpc('copy_song_to_band', { p_song_id: songId, p_band_id: ui.bandId });
+  if(error){ toast('Não consegui copiar: '+errMsg(error), true); if(btn){ btn.disabled=false; btn.textContent='Copiar'; } return; }
+  await loadBandData(ui.bandId);
+  refreshPublicResults();
+  toast('Música copiada para a banda.');
+}
+
+/* ============================================================
    EVENT DELEGATION
    ============================================================ */
 document.addEventListener('click', function(e){
@@ -970,7 +1258,20 @@ document.addEventListener('click', function(e){
   switch(action){
     case 'auth-tab': ui.authTab = t.getAttribute('data-tab'); ui.authError=''; render(); break;
     case 'logout': doLogout(); break;
-    case 'go-home': ui.bandId=null; ui.showId=null; ui.tab='songs'; ui.search=''; stashNav(); render(); break;
+    case 'open-admin': openAdmin(); break;
+    case 'close-admin': ui.screen='band'; ui.search=''; render(); break;
+    case 'admin-refresh': loadAdminUsers().then(render); break;
+    case 'admin-reset': ui.modal={type:'reset-pw', userId:t.getAttribute('data-id')}; render(); break;
+    case 'admin-gen-pw': var pwf=document.getElementById('f-reset-pw'); if(pwf) pwf.value=genPassword(); break;
+    case 'admin-set': (function(id){ var u=(cache.adminUsers||[]).find(function(x){return x.id===id;});
+      ui.modal={type:'confirm', title:'Tornar administrador', message:(u?(u.display_name||u.email):'Essa pessoa')+' vai poder ver todos os usuários, redefinir senhas e gerenciar administradores.', confirmLabel:'Tornar admin', onConfirm:function(){ adminSetAdmin(id, true); }}; render(); })(t.getAttribute('data-id')); break;
+    case 'admin-unset': (function(id){ ui.modal={type:'confirm', title:'Tirar administrador', message:'Essa pessoa perde o acesso à área administrativa.', confirmLabel:'Tirar admin', onConfirm:function(){ adminSetAdmin(id, false); }}; render(); })(t.getAttribute('data-id')); break;
+    case 'copy-text': var txt=t.getAttribute('data-text'); if(navigator.clipboard) navigator.clipboard.writeText(txt).then(function(){ toast('Copiado.'); }, function(){}); break;
+    case 'open-account': ui.modal={type:'account'}; render(); break;
+    case 'copy-song': ui.modal={type:'copy-song', songId:t.getAttribute('data-id')}; render(); break;
+    case 'open-public-lib': ui.modal={type:'public-lib', query:'', results:[], loading:true}; render(); loadPublicSongs(''); break;
+    case 'copy-public': copyPublicSong(t.getAttribute('data-id'), t); break;
+    case 'go-home': ui.screen='band'; ui.bandId=null; ui.showId=null; ui.tab='songs'; ui.search=''; stashNav(); render(); break;
     case 'open-band': ui.bandId=t.getAttribute('data-id'); ui.tab='songs'; ui.search=''; stashNav();
       render(); loadBandData(ui.bandId).then(render); break;
     case 'new-band': pendingLogoFile=null; ui.modal={type:'new-band'}; render(); break;
@@ -1018,9 +1319,10 @@ document.addEventListener('input', function(e){
 });
 
 document.addEventListener('submit', function(e){
-  var form = e.target.closest('#auth-form, #modal-form');
+  var form = e.target.closest('#auth-form, #modal-form, #pw-form');
   if(!form) return;
   e.preventDefault();
+  if(form.id === 'pw-form'){ changeOwnPassword('f-pw', true); return; }
   if(form.id === 'auth-form'){
     var email = document.getElementById('f-auth-email').value.trim();
     var pass = document.getElementById('f-auth-pass').value;
@@ -1036,6 +1338,10 @@ document.addEventListener('submit', function(e){
   else if(action==='save-song-edit') saveSongEdit(btn.getAttribute('data-id'));
   else if(action==='save-show-new') saveNewShow();
   else if(action==='save-show-edit') saveShowEdit(btn.getAttribute('data-id'));
+  else if(action==='save-account') changeOwnPassword('f-acc', false);
+  else if(action==='save-reset-pw') adminResetPassword(btn.getAttribute('data-id'));
+  else if(action==='save-copy-song') copySongToBands(btn.getAttribute('data-id'));
+  else if(action==='close-modal'){ ui.modal=null; render(); }
 });
 
 var onSearchInput = debounce(function(value){
@@ -1045,6 +1351,7 @@ var onSearchInput = debounce(function(value){
   if(again) again.focus();
 }, 120);
 document.addEventListener('input', function(e){
+  if(e.target.id === 'f-pub-search'){ onPublicSearch(e.target.value); return; }
   if(e.target.matches('[data-action="search"]')){
     var val = e.target.value;
     ui.search = val; // keep immediate for controlled feel; render debounced
@@ -1094,7 +1401,8 @@ async function boot(){
     var wasLoggedIn = !!session;
     session = newSession;
     if(!session){
-      profile = null; cache = { bands:[], members:[], songs:[], shows:[], showSongs:{}, signedUrls:{} };
+      profile = null; isAdmin = false; ui.modal = null; ui.authError = '';
+      cache = { bands:[], members:[], songs:[], shows:[], showSongs:{}, signedUrls:{}, adminUsers:[] };
       ui.screen = 'auth';
       render();
       return;

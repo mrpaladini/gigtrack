@@ -80,10 +80,12 @@ No [painel do Supabase](https://supabase.com/dashboard/project/ttaxdkoaecxomsagn
   - `https://www.gigtrack.com.br/**`
   - `http://localhost:8080/**` (opcional, para testar no computador)
 
-Sem isso, o link do e-mail de confirmação de conta leva para o endereço errado.
+**Cadastro sem e-mail de confirmação:** em *Authentication → Sign In / Providers → Email*, desligue
+**Confirm email** e salve. Assim ninguém recebe e-mail do Supabase ao criar conta, e a pessoa já entra
+direto. (Se alguém esquecer a senha, um administrador redefine pela área administrativa.)
 
-Opcional, em *Authentication → Emails → Templates*: troque os textos dos e-mails de confirmação
-para mencionar "GigTrack".
+**Recomendado:** em *Authentication → Attack Protection* (ou *Password security*), ligue a proteção
+contra senhas vazadas.
 
 ## 5. Conferir
 

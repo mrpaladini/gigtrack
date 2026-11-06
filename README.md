@@ -7,6 +7,10 @@ Spotify e Cifra Club, arquivo de partitura), cifras com troca de tom, shows com 
 show e PDF pronto para colar no palco. Cada integrante tem a própria conta; o dono da banda convida
 os outros com um código.
 
+Músicas podem ser **copiadas entre bandas** e marcadas como **públicas**, para outros usuários
+copiarem pela biblioteca de músicas públicas. Administradores (grupo *admins*) têm uma **área
+administrativa** para ver os usuários e redefinir senhas.
+
 Funciona no celular, no tablet e no computador, e pode ser instalado na tela inicial como um app.
 
 ## Como é feito
@@ -78,6 +82,16 @@ As capturas ficam em `tests/output/`.
 
 Os arquivos são referenciados com `?v=1.1.0` no `index.html` e ficam 30 dias em cache. Ao mudar
 CSS ou JS, aumente esse número (ex.: `?v=1.1.1`) para os celulares baixarem a versão nova.
+
+## Administração
+
+- O usuário administrador padrão é **gigadmin** (no login, digite só `gigadmin`). A senha inicial foi
+  passada à parte e precisa ser trocada no primeiro acesso.
+- Quem está no grupo *admins* vê o ícone de escudo no topo → lista de usuários, **Redefinir senha** e
+  **Tornar/Tirar admin**.
+- As permissões ficam no banco (funções `admin_*` com verificação de `app_admins`); o app só mostra
+  ou esconde os botões.
+- Login por nome de usuário: um texto sem `@` vira `<usuário>@gigtrack.com.br`.
 
 ## Cifras e Cifra Club
 

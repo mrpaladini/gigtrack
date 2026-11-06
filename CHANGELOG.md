@@ -1,5 +1,22 @@
 # Mudanças
 
+## 1.2.0 — 06/11/2026 · Administração, músicas públicas e cópias
+
+- **Área administrativa** (menu com escudo no topo, só para o grupo *admins*): lista de usuários com
+  data de criação, último acesso e número de bandas; **redefinir senha** (gera uma senha temporária
+  para copiar e enviar; a pessoa é obrigada a criar uma nova no próximo login e as sessões abertas
+  dela são encerradas); **tornar/tirar administrador** (ninguém tira a si mesmo).
+- Usuário administrador padrão **gigadmin** (entra só com o nome de usuário, sem e-mail), com troca
+  de senha obrigatória no primeiro acesso.
+- Login aceita **e-mail ou usuário**.
+- **Minha conta** (ícone de chave): trocar a própria senha.
+- **Músicas públicas**: opção no formulário da música; biblioteca "Músicas públicas" para buscar e
+  copiar músicas de outros usuários (sem comentário e sem anexo).
+- **Copiar música para outra banda**: botão em cada música; leva tom, duração, links, cifra,
+  comentário e anexo. Cada banda fica com a sua cópia.
+- Cadastro sem e-mail de confirmação (com a opção desligada no Supabase).
+- Banco: migration `20261106200000_admin_publicas_copias.sql`.
+
 ## 1.1.0 — 06/11/2026 · Link do Cifra Club
 
 - O Cifra Club recusa acessos vindos do servidor (HTTP 403), então a busca automática da cifra saiu.

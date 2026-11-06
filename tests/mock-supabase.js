@@ -5,7 +5,8 @@
 (function () {
   'use strict';
 
-  var TABLES = ['profiles', 'bands', 'band_members', 'band_invites', 'songs', 'shows', 'show_songs', 'files'];
+  var TABLES = ['profiles', 'bands', 'band_members', 'band_invites', 'songs', 'shows', 'show_songs', 'files', 'app_admins'];
+  var OPT = window.__MOCK || {};  // { admin: bool, mustChange: bool } definido pelo teste
   var mem = {}; TABLES.forEach(function (t) { mem[t] = []; });
   var store = null, assets = null, uid = null, persistent = false;
   var authCb = null, session = null;
@@ -61,8 +62,21 @@
     if (!session) session = { user: { id: 'local', email: 'voce@teste.local' }, access_token: 'teste' };
     if (!persistent) {
       warn('Modo temporário: os dados somem ao recarregar a página.');
-      if (!mem.profiles.length) mem.profiles.push({ id: 'local', display_name: 'Você' });
+      if (!mem.profiles.length) mem.profiles.push({ id: 'local', display_name: 'Você', must_change_password: !!OPT.mustChange });
     }
+    session.user.email = OPT.email || 'voce@teste.local';
+    if (OPT.admin) mem.app_admins.push({ user_id: session.user.id });
+    // outros usuários e uma banda alheia com uma música pública
+    mem.profiles.push({ id: 'u-ana', display_name: 'Ana Baterista', must_change_password: false });
+    mem.bands.push({ id: 'b-outra', name: 'Banda da Ana', created_by: 'u-ana' });
+    mem.band_members.push({ band_id: 'b-outra', user_id: 'u-ana', role: 'owner' });
+    mem.songs.push({ id: 's-publica', band_id: 'b-outra', name: 'Garota de Ipanema', artist: 'Tom Jobim', song_key: 'F',
+      duration_sec: 300, chord_sheet: 'F7M  G7\nOlha que coisa mais linda', chord_key: 'F', comment: 'segredo da Ana',
+      chord_source_url: 'https://www.cifraclub.com.br/tom-jobim/garota-de-ipanema/', is_public: true, created_by: 'u-ana' });
+    mem._users = [
+      { id: session.user.id, email: session.user.email, created_at: '2026-11-06T10:00:00Z', last_sign_in_at: new Date().toISOString() },
+      { id: 'u-ana', email: 'ana@exemplo.com', created_at: '2026-11-05T09:00:00Z', last_sign_in_at: null }
+    ];
   })();
 
   // ---------- Query builder com a mesma cara do supabase-js ----------
@@ -105,7 +119,7 @@
     if (this.op === 'insert') {
       var list = Array.isArray(this.d) ? this.d : [this.d];
       rows = list.map(function (d) {
-        var r = Object.assign({ id: newId(), created_at: now }, clone(d));
+        var r = Object.assign({ id: newId(), created_at: now }, t === 'songs' ? { is_public: false, created_by: session.user.id, copied_from: null } : {}, clone(d));
         if (t === 'songs' || t === 'shows') r.updated_at = now;
         mem[t].push(r); persist(t, r); return r;
       });
@@ -174,6 +188,57 @@
       }
       return { data: clone(mem.bands.find(function (x) { return x.id === found.band_id; })), error: null };
     }
+    var isAdm = mem.app_admins.some(function (a) { return a.user_id === me; });
+    var deny = { data: null, error: { message: 'Acesso restrito aos administradores.' } };
+    if (name === 'is_app_admin') return { data: isAdm, error: null };
+    if (name === 'admin_list_users') {
+      if (!isAdm) return deny;
+      return { data: mem._users.map(function (u) {
+        var p = mem.profiles.find(function (x) { return x.id === u.id; }) || {};
+        return { id: u.id, email: u.email, display_name: p.display_name || '', created_at: u.created_at, last_sign_in_at: u.last_sign_in_at,
+          is_admin: mem.app_admins.some(function (a) { return a.user_id === u.id; }), must_change_password: !!p.must_change_password,
+          band_count: mem.band_members.filter(function (m) { return m.user_id === u.id; }).length };
+      }), error: null };
+    }
+    if (name === 'admin_reset_password') {
+      if (!isAdm) return deny;
+      if (String(args.p_new_password || '').length < 8) return { data: null, error: { message: 'A senha precisa ter pelo menos 8 caracteres.' } };
+      var pr = mem.profiles.find(function (x) { return x.id === args.p_user_id; });
+      if (pr && args.p_user_id !== me) pr.must_change_password = true;
+      window.__lastReset = { user: args.p_user_id, password: args.p_new_password };
+      return { data: null, error: null };
+    }
+    if (name === 'admin_set_admin') {
+      if (!isAdm) return deny;
+      if (!args.p_admin && args.p_user_id === me) return { data: null, error: { message: 'Você não pode remover a si mesmo do grupo de administradores.' } };
+      mem.app_admins = mem.app_admins.filter(function (a) { return a.user_id !== args.p_user_id; });
+      if (args.p_admin) mem.app_admins.push({ user_id: args.p_user_id });
+      return { data: null, error: null };
+    }
+    if (name === 'list_public_songs') {
+      var q = String(args.p_query || '').toLowerCase();
+      return { data: mem.songs.filter(function (x) { return x.is_public && (!q || (x.name + ' ' + (x.artist || '')).toLowerCase().indexOf(q) > -1); })
+        .map(function (x) {
+          var pb = mem.bands.find(function (b) { return b.id === x.band_id; }) || {};
+          var pp = mem.profiles.find(function (p) { return p.id === x.created_by; }) || {};
+          return { id: x.id, name: x.name, artist: x.artist || '', song_key: x.song_key || '', duration_sec: x.duration_sec || 0,
+            youtube_url: '', spotify_url: '', chord_source_url: x.chord_source_url || null, has_chords: !!x.chord_sheet,
+            chord_key: x.chord_key || null, shared_by: pp.display_name || '', band_id: x.band_id, band_name: pb.name || '' };
+        }), error: null };
+    }
+    if (name === 'copy_song_to_band') {
+      var mine = visibleBandIds();
+      var src = mem.songs.find(function (x) { return x.id === args.p_song_id; });
+      if (mine.indexOf(args.p_band_id) < 0) return { data: null, error: { message: 'Você não participa da banda de destino.' } };
+      if (!src) return { data: null, error: { message: 'Música não encontrada.' } };
+      var own = mine.indexOf(src.band_id) > -1;
+      if (!own && !src.is_public) return { data: null, error: { message: 'Essa música não é pública.' } };
+      if (src.band_id === args.p_band_id) return { data: null, error: { message: 'A música já está nessa banda.' } };
+      var cp = Object.assign(clone(src), { id: newId(), band_id: args.p_band_id, comment: own ? src.comment : '', sheet_path: null, sheet_name: null,
+        is_public: false, created_by: me, copied_from: src.id, created_at: now, updated_at: now });
+      mem.songs.push(cp); persist('songs', cp);
+      return { data: clone(cp), error: null };
+    }
     return { data: null, error: { message: 'Função não disponível no teste: ' + name } };
   }
 
@@ -192,6 +257,12 @@
             return { error: { message: e && e.code === 'unsupported_type' ? 'Esse tipo de arquivo não é aceito no teste (use PDF, imagem ou .txt).' : (e && e.message) || 'Falha no envio.' } };
           }
         },
+        copy: async function (from, to) {
+          var f = mem.files.find(function (x) { return x.id === from; });
+          if (!f) return { error: { message: 'Arquivo não encontrado.' } };
+          mem.files.push({ id: to, asset_id: f.asset_id });
+          return { data: { path: to }, error: null };
+        },
         createSignedUrl: async function (path) {
           await ready;
           var f = mem.files.find(function (x) { return x.id === path; });
@@ -209,7 +280,14 @@
       return { data: { subscription: { unsubscribe: function () {} } } };
     },
     signOut: async function () { var s = session; session = null; if (authCb) authCb('SIGNED_OUT', null); session = s; },
-    signInWithPassword: async function () { await ready; if (authCb) authCb('SIGNED_IN', session); return { error: null }; },
+    updateUser: async function (attrs) {
+      await ready;
+      if (attrs && attrs.password && attrs.password.length < 6) return { data: null, error: { message: 'Password should be at least 6 characters.' } };
+      window.__lastPasswordChange = attrs && attrs.password;
+      return { data: { user: session.user }, error: null };
+    },
+    signInWithPassword: async function (cred) { window.__lastLogin = cred && cred.email; await ready; if (authCb) authCb('SIGNED_IN', session); return { error: null }; },
+    _oldSignIn: async function () { await ready; if (authCb) authCb('SIGNED_IN', session); return { error: null }; },
     signUp: async function () { await ready; if (authCb) authCb('SIGNED_IN', session); return { data: { session: session }, error: null }; }
   };
 

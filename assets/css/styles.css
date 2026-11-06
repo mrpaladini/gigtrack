@@ -271,6 +271,43 @@ transition-duration:.01ms !important;}}
 @media (pointer:coarse){.setlink{padding:.35rem .7rem;font-size:.78rem;}}
 
 /* ============================================================
+   ADMINISTRAÇÃO, MÚSICAS PÚBLICAS E CÓPIAS (1.2.0)
+   ============================================================ */
+.muted{color:var(--ink-soft);}
+.crumb .name svg{width:1.05rem;height:1.05rem;vertical-align:-2px;color:var(--accent-2);}
+.userlist{display:flex;flex-direction:column;gap:.55rem;}
+.userrow{display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap;
+background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:.8rem .95rem;}
+.userrow .uinfo{min-width:0;flex:1 1 280px;}
+.userrow .uname2{font-weight:700;}
+.userrow .uemail{font-size:.85rem;color:var(--ink-soft);overflow-wrap:anywhere;}
+.umeta{font-size:.75rem;color:var(--ink-faint);margin-top:.2rem;}
+.umeta a{color:var(--accent-2);}
+.ubadges{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.35rem;}
+.ubadges:empty{display:none;}
+.uactions{display:flex;gap:.5rem;flex-wrap:wrap;}
+.badge{display:inline-flex;align-items:center;gap:.25rem;font-size:.68rem;font-weight:700;letter-spacing:.05em;
+text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;border:1px solid var(--border);}
+.badge svg{width:.8rem;height:.8rem;}
+.badge-admin{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,var(--border));}
+.badge-warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--border));}
+.pill-public{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,var(--border));}
+.checklist{display:flex;flex-direction:column;gap:.4rem;}
+.checkrow{display:flex;gap:.65rem;align-items:flex-start;background:var(--surface);border:1px solid var(--border);
+border-radius:var(--radius-sm);padding:.6rem .75rem;cursor:pointer;}
+.checkrow input{width:1.15rem;height:1.15rem;margin:.1rem 0 0;accent-color:var(--accent);flex-shrink:0;}
+.switchrow strong{font-size:.92rem;}
+.modal-wide{max-width:720px;}
+.publist{display:flex;flex-direction:column;gap:.5rem;}
+.pubrow{display:flex;gap:.8rem;align-items:center;background:var(--bg-elev);border:1px solid var(--border);
+border-radius:var(--radius-sm);padding:.65rem .75rem;}
+.pubrow .pinfo{flex:1;min-width:0;}
+.pubrow .title{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pubrow .sub{font-size:.8rem;color:var(--ink-soft);}
+.pubrow .pact{flex-shrink:0;}
+.btn-ghost:hover{border-color:var(--border);}
+
+/* ============================================================
    RESPONSIVO — celular, tablet e telas de toque
    ============================================================ */
 .spacer{flex:1;}
@@ -345,6 +382,12 @@ padding-left:max(1.1rem,env(safe-area-inset-left));padding-right:max(1.1rem,env(
   .authwrap{padding:1rem;align-items:flex-start;padding-top:max(2.5rem,env(safe-area-inset-top));}
   .authcard{padding:1.4rem 1.1rem;}
   .invitebox .code{font-size:1.1rem;}
+  .uactions{width:100%;}
+  .uactions .btn{flex:1;justify-content:center;}
+  .pubrow{flex-wrap:wrap;}
+  .pubrow .pact{width:100%;}
+  .pubrow .pact .btn{width:100%;justify-content:center;}
+  .toolbar .search ~ .btn{flex:1;justify-content:center;}
   .summarybar{padding:.7rem .85rem;}
 }
 

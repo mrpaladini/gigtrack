@@ -40,10 +40,16 @@ def free_port():
 def overflow(page):
     return page.evaluate('() => document.documentElement.scrollWidth - window.innerWidth')
 
-def run_flow(browser, base, label, vp, touch):
+def new_page(browser, vp, touch, mock_opts=None):
     ctx = browser.new_context(viewport=vp, has_touch=touch, is_mobile=touch and vp['width'] < 700,
                               device_scale_factor=2 if touch else 1, accept_downloads=True)
-    page = ctx.new_page()
+    if mock_opts:
+        import json
+        ctx.add_init_script('window.__MOCK = ' + json.dumps(mock_opts) + ';')
+    return ctx, ctx.new_page()
+
+def run_flow(browser, base, label, vp, touch):
+    ctx, page = new_page(browser, vp, touch)
     errors = []
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.on('pageerror', lambda e: errors.append(str(e)))
@@ -59,6 +65,7 @@ def run_flow(browser, base, label, vp, touch):
     page.wait_for_selector('.hero h1', timeout=8000)
     check(f'[{label}] abre na lista de bandas', 'Suas bandas' in page.inner_text('.hero h1'))
     check(f'[{label}] marca GigTrack no topo', 'GigTrack' in page.inner_text('.topbar'))
+    check(f'[{label}] usuário comum não vê o menu Administração', page.locator('[data-action="open-admin"]').count() == 0)
     page.screenshot(path=str(OUT / f'{label}-1-bandas.png'), full_page=True)
 
     # criar banda
@@ -78,6 +85,7 @@ def run_flow(browser, base, label, vp, touch):
         page.fill('#f-song-min', str(mi)); page.fill('#f-song-sec', str(se))
         if name == 'Tempo Perdido':
             page.fill('#f-song-youtube', 'https://youtube.com/watch?v=x')
+            page.check('#f-song-public')
             # link inválido é recusado
             page.fill('#f-song-cifra-url', 'https://example.com/musica')
             check(f'[{label}] link de outro site mostra aviso', 'não é do Cifra Club' in page.inner_text('#f-song-cifra-status'))
@@ -95,6 +103,7 @@ def run_flow(browser, base, label, vp, touch):
     page.wait_for_selector('.songrow')
     check(f'[{label}] 3 músicas na lista', page.locator('.songrow').count() == 3)
     href = page.locator('.songrow .pill-cifraclub').first.get_attribute('href') if page.locator('.songrow .pill-cifraclub').count() else ''
+    check(f'[{label}] marca "Pública" na música pública', page.locator('.songrow .pill-public').count() == 1)
     check(f'[{label}] atalho do Cifra Club na lista', href == 'https://cifraclub.com.br/legiao-urbana/tempo-perdido/', href)
     check(f'[{label}] lista de músicas sem rolagem lateral', overflow(page) <= 0, f'{overflow(page)}px')
     if touch:
@@ -160,6 +169,140 @@ def run_flow(browser, base, label, vp, touch):
     check(f'[{label}] sem erros no console', not bad, '; '.join(bad)[:300])
     ctx.close()
 
+
+def setup_routes(page, errors):
+    def route_html(route):
+        resp = route.fetch()
+        route.fulfill(response=resp, headers={**resp.headers, 'content-security-policy': CSP})
+    page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
+    page.on('pageerror', lambda e: errors.append(str(e)))
+    page.route(re.compile(r'.*/(index\.html)?(\?.*)?$'), route_html)
+    page.route('**/assets/vendor/supabase-*.js', lambda r: r.fulfill(body=MOCK, content_type='application/javascript'))
+    page.route(re.compile(r'https://fonts\.(googleapis|gstatic)\.com/.*'), lambda r: r.abort())
+
+def report_errors(label, errors):
+    bad = [e for e in errors if 'fonts.g' not in e and 'ERR_FAILED' not in e and 'net::' not in e]
+    check(f'[{label}] sem erros no console', not bad, '; '.join(bad)[:300])
+
+def new_band(page, name):
+    page.click('[data-action="new-band"]')
+    page.fill('#f-band-name', name)
+    page.click('.modal-foot button[type="submit"]')
+    page.wait_for_function("n => document.querySelector('.topbar') && document.querySelector('.topbar').innerText.includes(n)", arg=name)
+    page.wait_for_selector('.tabs')
+
+def run_admin_flow(browser, base, label, vp, touch):
+    """Admin: cópia entre bandas, biblioteca pública, área administrativa, conta e login por usuário."""
+    ctx, page = new_page(browser, vp, touch, {'admin': True, 'email': 'gigadmin@gigtrack.com.br'})
+    errors = []
+    setup_routes(page, errors)
+    page.goto(base + '/')
+    page.wait_for_selector('.hero h1', timeout=8000)
+    check(f'[{label}] admin vê o menu Administração', page.locator('[data-action="open-admin"]').count() == 1)
+
+    new_band(page, 'Banda Um')
+    page.click('[data-action="go-home"]'); page.wait_for_selector('.bandgrid')
+    new_band(page, 'Banda Dois')
+    page.click('[data-action="new-song"]')
+    page.fill('#f-song-name', 'Asa Branca'); page.fill('#f-song-artist', 'Luiz Gonzaga'); page.fill('#f-song-key', 'G')
+    page.fill('#f-song-comment', 'intro na sanfona')
+    page.check('#f-song-public')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_selector('.modal-backdrop', state='detached')
+
+    # copiar para outra banda
+    page.click('.songrow [data-action="copy-song"]')
+    page.wait_for_selector('input[name="copy-band"]')
+    check(f'[{label}] cópia lista só as outras bandas', page.locator('input[name="copy-band"]').count() == 1)
+    page.screenshot(path=str(OUT / f'{label}-admin-1-copiar.png'))
+    page.check('input[name="copy-band"]')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_selector('.modal-backdrop', state='detached')
+    page.click('[data-action="go-home"]'); page.wait_for_selector('.bandgrid')
+    page.locator('.bandcard', has_text='Banda Um').click(); page.wait_for_selector('.songrow')
+    rows = page.locator('.songrow').all_inner_texts()
+    check(f'[{label}] música copiada aparece na outra banda', any('Asa Branca' in t for t in rows), str(rows)[:200])
+    check(f'[{label}] cópia entre bandas próprias mantém o comentário', page.locator('.songrow', has_text='Asa Branca').locator('.pill', has_text='Nota').count() == 1)
+    check(f'[{label}] cópia não sai pública', page.locator('.songrow', has_text='Asa Branca').locator('.pill-public').count() == 0)
+
+    # biblioteca pública
+    page.click('[data-action="open-public-lib"]')
+    page.wait_for_selector('.pubrow')
+    names = page.locator('.pubrow .title').all_inner_texts()
+    check(f'[{label}] biblioteca mostra músicas públicas de outras bandas', 'Garota de Ipanema' in names, str(names))
+    check(f'[{label}] biblioteca reconhece cópia já feita', 'Já copiada' in page.locator('.pubrow', has_text='Asa Branca').inner_text())
+    page.fill('#f-pub-search', 'ipanema'); page.wait_for_timeout(600)
+    check(f'[{label}] busca na biblioteca filtra', page.locator('.pubrow').count() == 1)
+    check(f'[{label}] biblioteca sem rolagem lateral', overflow(page) <= 0, f'{overflow(page)}px')
+    page.screenshot(path=str(OUT / f'{label}-admin-2-publicas.png'))
+    page.click('[data-action="copy-public"]')
+    page.wait_for_function("document.querySelector('.pubrow') && document.querySelector('.pubrow').innerText.includes('Já copiada')")
+    page.click('.modal-head [data-action="close-modal"]')
+    garota = page.locator('.songrow', has_text='Garota de Ipanema')
+    check(f'[{label}] música pública copiada para a banda', garota.count() == 1)
+    check(f'[{label}] cópia de música pública vem sem o comentário', garota.locator('.pill', has_text='Nota').count() == 0)
+
+    # área administrativa
+    page.click('[data-action="open-admin"]')
+    page.wait_for_selector('.userrow')
+    check(f'[{label}] admin lista os usuários', page.locator('.userrow').count() == 2)
+    check(f'[{label}] gigadmin aparece como usuário', 'gigadmin (usuário)' in page.inner_text('.userlist'))
+    page.screenshot(path=str(OUT / f'{label}-admin-3-usuarios.png'), full_page=True)
+    check(f'[{label}] área admin sem rolagem lateral', overflow(page) <= 0, f'{overflow(page)}px')
+    ana = page.locator('.userrow', has_text='Ana Baterista')
+    ana.locator('[data-action="admin-reset"]').click()
+    page.wait_for_selector('#f-reset-pw')
+    pw = page.input_value('#f-reset-pw')
+    check(f'[{label}] senha temporária gerada', len(pw) >= 8, pw)
+    page.click('.modal-foot button[type="submit"]')
+    page.wait_for_selector('.invitebox .code')
+    shown = page.inner_text('.invitebox .code')
+    sent = page.evaluate('window.__lastReset && window.__lastReset.password')
+    check(f'[{label}] senha redefinida e exibida para copiar', shown == pw == sent, f'{shown} / {sent}')
+    page.screenshot(path=str(OUT / f'{label}-admin-4-senha.png'))
+    page.click('.modal-foot [data-action="close-modal"]')
+    check(f'[{label}] usuário fica com troca de senha pendente', 'troca de senha pendente' in page.locator('.userrow', has_text='Ana Baterista').inner_text().lower())
+    page.locator('.userrow', has_text='Ana Baterista').locator('[data-action="admin-set"]').click()
+    page.click('[data-action="confirm-yes"]')
+    page.wait_for_function("[...document.querySelectorAll('.userrow')].some(r => r.innerText.includes('Ana') && r.querySelector('.badge-admin'))")
+    check(f'[{label}] admin promove outro usuário', True)
+    check(f'[{label}] admin não pode tirar a si mesmo', page.locator('.userrow', has_text='(você)').locator('[data-action="admin-unset"]').count() == 0)
+    page.click('[data-action="close-admin"]'); page.wait_for_selector('.main')
+
+    # minha conta
+    page.click('[data-action="open-account"]')
+    page.fill('#f-acc-new', 'SenhaNova123'); page.fill('#f-acc-again', 'Diferente123')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_timeout(200)
+    check(f'[{label}] conta: senhas diferentes são recusadas', page.evaluate('window.__lastPasswordChange') is None)
+    page.fill('#f-acc-again', 'SenhaNova123')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_selector('.modal-backdrop', state='detached')
+    check(f'[{label}] conta: senha trocada', page.evaluate('window.__lastPasswordChange') == 'SenhaNova123')
+
+    # login por nome de usuário
+    page.click('[data-action="logout"]'); page.wait_for_selector('#auth-form')
+    check(f'[{label}] login aceita "E-mail ou usuário"', 'usuário' in page.inner_text('#auth-form').lower())
+    page.fill('#f-auth-email', 'GigAdmin'); page.fill('#f-auth-pass', 'Password@123!')
+    page.click('#auth-form button[type="submit"]'); page.wait_for_timeout(400)
+    check(f'[{label}] usuário gigadmin vira gigadmin@gigtrack.com.br', page.evaluate('window.__lastLogin') == 'gigadmin@gigtrack.com.br', str(page.evaluate('window.__lastLogin')))
+    report_errors(label + ' admin', errors)
+    ctx.close()
+
+def run_force_password(browser, base, label, vp, touch):
+    ctx, page = new_page(browser, vp, touch, {'mustChange': True})
+    errors = []
+    setup_routes(page, errors)
+    page.goto(base + '/')
+    page.wait_for_selector('#pw-form', timeout=8000)
+    check(f'[{label}] senha redefinida obriga a criar senha nova', page.locator('.topbar').count() == 0)
+    page.screenshot(path=str(OUT / f'{label}-troca-senha.png'))
+    page.fill('#f-pw-new', 'curta'); page.fill('#f-pw-again', 'curta')
+    page.click('#pw-form button[type="submit"]'); page.wait_for_timeout(200)
+    check(f'[{label}] senha curta recusada', '8 caracteres' in page.inner_text('#pw-form'))
+    page.fill('#f-pw-new', 'MinhaSenha2026'); page.fill('#f-pw-again', 'MinhaSenha2026')
+    page.click('#pw-form button[type="submit"]')
+    page.wait_for_selector('.hero h1', timeout=8000)
+    check(f'[{label}] depois da troca entra no app', page.evaluate('window.__lastPasswordChange') == 'MinhaSenha2026')
+    report_errors(label + ' troca', errors)
+    ctx.close()
+
 def main():
     port = free_port()
     srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bind', '127.0.0.1', '--directory', str(ROOT)],
@@ -169,10 +312,11 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for label, vp, touch in VIEWPORTS:
-                try:
-                    run_flow(browser, f'http://127.0.0.1:{port}', label, vp, touch)
-                except Exception as e:
-                    check(f'[{label}] fluxo completo', False, repr(e)[:400])
+                for fn, nm in ((run_flow, 'fluxo completo'), (run_admin_flow, 'fluxo admin'), (run_force_password, 'troca de senha')):
+                    try:
+                        fn(browser, f'http://127.0.0.1:{port}', label, vp, touch)
+                    except Exception as e:
+                        check(f'[{label}] {nm}', False, repr(e)[:400])
             browser.close()
     finally:
         srv.terminate()
