@@ -82,6 +82,7 @@ function debounce(fn, ms){
 var sb = null;
 var configOk = false;
 function initSupabase(){
+  if(sb){ configOk = true; return; }
   var cfg = window.GIGTRACK_CONFIG || {};
   var url = cfg.SUPABASE_URL, key = cfg.SUPABASE_ANON_KEY;
   if(!url || !key || url.indexOf('COLE_AQUI') > -1 || key.indexOf('COLE_AQUI') > -1){
@@ -1464,6 +1465,8 @@ async function boot(){
   if(!data || !data.session){ ui.screen = 'auth'; render(); }
 }
 
+// Lê a configuração ANTES do primeiro desenho; senão a tela "Configuração pendente" pisca ao abrir.
+initSupabase();
 render();
 boot();
 

@@ -1,5 +1,10 @@
 # Mudanças
 
+## 1.3.1 — 06/11/2026 · Correção
+
+- Ao abrir o site, a tela "Configuração pendente" aparecia por um instante antes do app carregar:
+  o primeiro desenho acontecia antes de ler a configuração. Corrigido, com teste automático.
+
 ## 1.3.0 — 06/11/2026 · Liberação de contas pelo admin
 
 - Contas novas ficam **aguardando liberação**: a pessoa vê uma tela de espera e não consegue criar

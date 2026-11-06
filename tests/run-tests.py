@@ -51,6 +51,12 @@ def new_page(browser, vp, touch, mock_opts=None):
 def run_flow(browser, base, label, vp, touch):
     ctx, page = new_page(browser, vp, touch)
     errors = []
+    # registra se a tela "Configuração pendente" aparecer em qualquer momento, mesmo por um instante
+    page.add_init_script("""
+      window.__sawSetup = false;
+      new MutationObserver(function(){ if(document.body && /Configuração pendente/.test(document.body.textContent)) window.__sawSetup = true; })
+        .observe(document, {childList:true, subtree:true, characterData:true});
+    """)
     page.on('console', lambda m: errors.append(m.text) if m.type == 'error' else None)
     page.on('pageerror', lambda e: errors.append(str(e)))
 
@@ -64,6 +70,7 @@ def run_flow(browser, base, label, vp, touch):
     page.goto(base + '/')
     page.wait_for_selector('.hero h1', timeout=8000)
     check(f'[{label}] abre na lista de bandas', 'Suas bandas' in page.inner_text('.hero h1'))
+    check(f'[{label}] não pisca a tela "Configuração pendente" ao abrir', page.evaluate('window.__sawSetup') is False)
     check(f'[{label}] marca GigTrack no topo', 'GigTrack' in page.inner_text('.topbar'))
     check(f'[{label}] usuário comum não vê o menu Administração', page.locator('[data-action="open-admin"]').count() == 0)
     page.screenshot(path=str(OUT / f'{label}-1-bandas.png'), full_page=True)
