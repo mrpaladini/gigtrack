@@ -68,6 +68,8 @@ localmente, adicione `http://localhost:8080` em *Authentication → URL Configur
 ## Testes
 
 ```bash
+node tests/test-cifra-core.js                     # núcleo de cifras (tom e transposição)
+bash tests/test-keepalive.sh                      # 30 dias simulados do acesso automático
 pip install playwright && playwright install chromium
 python3 tests/run-tests.py                        # app completo em 5 tamanhos de tela
 ```
@@ -93,6 +95,12 @@ CSS ou JS, aumente esse número (ex.: `?v=1.1.1`) para os celulares baixarem a v
 - As permissões ficam no banco (funções `admin_*` com verificação de `app_admins`); o app só mostra
   ou esconde os botões.
 - Login por nome de usuário: um texto sem `@` vira `<usuário>@gigtrack.com.br`.
+
+## Acesso automático (Supabase não pausa)
+
+`cron/keepalive.php` roda pelo agendador (Cron Jobs) da Hostinger a cada 15 minutos e, em horários
+sorteados (a cada 2h30–3h30, sem repetir horário), acessa o site e o Supabase como um visitante.
+Configuração: `docs/DEPLOY.md`, passo 6. O último acesso aparece na área administrativa.
 
 ## Cifras e Cifra Club
 

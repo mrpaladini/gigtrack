@@ -290,6 +290,11 @@ background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--rad
 text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;border:1px solid var(--border);}
 .badge svg{width:.8rem;height:.8rem;}
 .badge-admin{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 45%,var(--border));}
+.keepalive{display:flex;gap:.5rem;align-items:flex-start;font-size:.82rem;padding:.55rem .75rem;border-radius:var(--radius-sm);
+border:1px solid var(--border);margin:-.25rem 0 1rem;color:var(--ink-soft);}
+.keepalive svg{width:1rem;height:1rem;flex-shrink:0;margin-top:.1rem;}
+.keepalive.ok svg{color:var(--accent-2);}
+.keepalive.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--border));}
 .badge-pending{color:#fff;background:var(--danger);border-color:var(--danger);}
 .pending-count{color:var(--danger);}
 .iconbtn.has-count{position:relative;}

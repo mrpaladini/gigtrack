@@ -29,6 +29,7 @@ function icon(name){
     key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
     users:'<circle cx="9" cy="8" r="3"/><path d="M2 20c0-3 3-5 7-5s7 2 7 5"/><path d="M17 9a3 3 0 1 0 0-6"/><path d="M22 20c0-2.5-1.7-4.3-4-4.9"/>',
     logout:'<path d="M15 17l5-5-5-5"/><path d="M20 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/>',
     shield:'<path d="M12 3l8 3v6c0 4.5-3.4 8.2-8 9-4.6-.8-8-4.5-8-9V6Z"/><path d="M9 12l2 2 4-4"/>',
     copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
@@ -130,8 +131,37 @@ var pendingLogoFile = null, pendingSheetFile = null;
    RENDER LOOP
    ============================================================ */
 function render(){
+  // Guarda o que já foi digitado no formulário aberto e devolve depois de redesenhar
+  // (senão um "Salvando…" ou um erro apagaria os campos).
+  var kept = snapshotForm();
   document.getElementById('app').innerHTML = renderScreen();
+  restoreForm(kept);
   focusFirstField();
+}
+function formSig(){
+  if(ui.modal) return 'modal|' + ui.modal.type + '|' + (ui.modal.id || ui.modal.songId || ui.modal.userId || ui.modal.showId || '');
+  if(document.getElementById('auth-form')) return 'auth|' + ui.authTab;
+  if(document.getElementById('pw-form')) return 'pw';
+  return '';
+}
+function snapshotForm(){
+  var root = document.querySelector('.modal-backdrop, #auth-form, #pw-form');
+  if(!root) return null;
+  var vals = {};
+  root.querySelectorAll('input[id], textarea[id], select[id]').forEach(function(f){
+    if(f.type === 'file' || f.type === 'password') return;
+    vals[f.id] = (f.type === 'checkbox' || f.type === 'radio') ? { c: f.checked } : { v: f.value };
+  });
+  return { sig: formSig(), vals: vals };
+}
+function restoreForm(kept){
+  if(!kept || kept.sig !== formSig()) return;
+  Object.keys(kept.vals).forEach(function(id){
+    var f = document.getElementById(id);
+    if(!f) return;
+    var k = kept.vals[id];
+    if('c' in k) f.checked = k.c; else f.value = k.v;
+  });
 }
 function focusFirstField(){
   var f = document.querySelector('.modal input, .modal textarea, .authform input');
@@ -434,6 +464,7 @@ function renderModal(){
     return ru ? modalWrap('Redefinir senha', resetPwBody(ru), 'save-reset-pw', m.userId, 'Redefinir') : '';
   }
   if(m.type==='reset-done') return resetDoneWrap(m);
+  if(m.type==='new-user') return modalWrap('Novo usuário', newUserBody(), 'save-new-user', null, 'Criar usuário');
   if(m.type==='copy-song'){
     var cs = getSong(m.songId);
     var hasOthers = cache.bands.some(function(b){ return cs && b.id !== cs.band_id; });
@@ -1065,6 +1096,10 @@ function loginLabel(email){
    ÁREA ADMINISTRATIVA (só grupo admins)
    ============================================================ */
 async function loadAdminUsers(){
+  sb.rpc('admin_keepalive_status').then(function(res){
+    cache.keepalive = (!res.error && res.data && res.data[0]) || null;
+    if(ui.screen === 'admin'){ var box = document.getElementById('keepalive-box'); if(box) box.outerHTML = renderKeepalive(); }
+  });
   var { data, error } = await sb.rpc('admin_list_users');
   if(error){ toast('Não consegui carregar os usuários: '+errMsg(error), true); cache.adminUsers = []; return; }
   cache.adminUsers = data || [];
@@ -1101,9 +1136,26 @@ function renderAdmin(){
   }).join('') || '<div class="empty"><p>Nenhum usuário encontrado.</p></div>';
   return '<div class="hero"><h1>Administração</h1><p>'+total+' usuário'+(total===1?'':'s')+' · '+admins+' administrador'+(admins===1?'':'es')+
     (pending ? ' · <strong class="pending-count">'+pending+' aguardando liberação</strong>' : '')+'. Libere contas novas, redefina senhas e gerencie quem é admin.</p></div>' +
+    renderKeepalive() +
     '<div class="toolbar"><div class="search">'+icon('search')+'<input type="text" placeholder="Buscar por nome ou e-mail" value="'+escapeHtml(ui.search||'')+'" data-action="search" aria-label="Buscar usuário"></div>' +
-    '<button class="btn" data-action="admin-refresh">'+icon('users')+'Atualizar</button></div>' +
+    '<button class="btn" data-action="admin-refresh">'+icon('users')+'Atualizar</button>' +
+    '<button class="btn btn-primary" data-action="admin-new-user">'+icon('plus')+'Novo usuário</button></div>' +
     '<div class="userlist">'+rows+'</div>';
+}
+/** Monitor do acesso automático (cron da Hostinger) que impede o Supabase de pausar o projeto. */
+function renderKeepalive(){
+  var k = cache.keepalive;
+  var cls, txt;
+  if(!k){
+    cls = 'warn';
+    txt = 'Acesso automático ainda não registrado. Configure o agendador da Hostinger (veja docs/DEPLOY.md, passo 6).';
+  } else {
+    var hrs = (Date.now() - new Date(k.last_at).getTime()) / 36e5;
+    cls = hrs > 8 ? 'warn' : 'ok';
+    txt = 'Acesso automático: último em ' + fmtDateTime(k.last_at) + ' · ' + k.total + ' no total' +
+      (hrs > 8 ? ' — está parado há mais de 8 horas; confira o agendador da Hostinger.' : '.');
+  }
+  return '<div id="keepalive-box" class="keepalive '+cls+'">'+icon(cls==='ok'?'check':'clock')+'<span>'+escapeHtml(txt)+'</span></div>';
 }
 function genPassword(){
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -1121,8 +1173,9 @@ function resetPwBody(u){
     '<div class="hint">Mínimo de 8 caracteres. Depois de salvar, copie e envie para a pessoa.</div></div>';
 }
 function resetDoneWrap(m){
-  return '<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal confirmbox" role="dialog" aria-modal="true" aria-label="Senha redefinida">' +
-    '<div class="modal-head"><h2>Senha redefinida</h2><button class="iconbtn" data-action="close-modal" aria-label="Fechar">'+icon('close')+'</button></div>' +
+  var title = m.title || 'Senha redefinida';
+  return '<div class="modal-backdrop" data-action="modal-backdrop"><div class="modal confirmbox" role="dialog" aria-modal="true" aria-label="'+escapeHtml(title)+'">' +
+    '<div class="modal-head"><h2>'+escapeHtml(title)+'</h2><button class="iconbtn" data-action="close-modal" aria-label="Fechar">'+icon('close')+'</button></div>' +
     '<div class="modal-body"><p class="muted" style="margin:0;">Envie para <strong>'+escapeHtml(m.who)+'</strong>:</p>' +
     '<div class="invitebox"><span class="code mono" style="letter-spacing:.04em;font-size:1.1rem;">'+escapeHtml(m.password)+'</span>' +
     '<button class="iconbtn" data-action="copy-text" data-text="'+escapeHtml(m.password)+'" aria-label="Copiar senha">'+icon('copy')+'</button></div>' +
@@ -1138,6 +1191,34 @@ async function adminResetPassword(userId){
   ui.busy = false;
   if(error){ toast('Não consegui redefinir: '+errMsg(error), true); render(); return; }
   ui.modal = { type:'reset-done', password: pw, who: (u && (u.display_name||u.email)) || '', email: u && u.email };
+  await loadAdminUsers();
+  render();
+}
+function newUserBody(){
+  return '<p class="muted" style="margin:0;">A conta já nasce liberada. No primeiro acesso a pessoa cria a própria senha.</p>' +
+    '<div class="field"><label class="u-label" for="f-nu-name">Nome</label><input type="text" id="f-nu-name" maxlength="60" placeholder="Ex.: João Batera" autocomplete="off"></div>' +
+    '<div class="field"><label class="u-label" for="f-nu-login">E-mail ou nome de usuário *</label>' +
+    '<input type="text" id="f-nu-login" required autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="email" placeholder="joao@email.com ou joao.batera">' +
+    '<div class="hint">Com nome de usuário (sem @), a pessoa entra digitando só o usuário, como no gigadmin.</div></div>' +
+    '<div class="field"><label class="u-label" for="f-reset-pw">Senha temporária *</label>' +
+    '<div class="cifraimport"><input type="text" id="f-reset-pw" required minlength="8" autocomplete="off" spellcheck="false" value="'+escapeHtml(genPassword())+'">' +
+    '<button type="button" class="btn" data-action="admin-gen-pw">Gerar outra</button></div>' +
+    '<div class="hint">Mínimo de 8 caracteres.</div></div>' +
+    '<label class="checkrow"><input type="checkbox" id="f-nu-admin"><span><strong>Administrador</strong><br><span class="hint" style="margin:0;">Pode ver todos os usuários, liberar contas e redefinir senhas.</span></span></label>';
+}
+async function adminCreateUser(){
+  var name = (document.getElementById('f-nu-name')||{}).value || '';
+  var login = ((document.getElementById('f-nu-login')||{}).value || '').trim();
+  var pw = (document.getElementById('f-reset-pw')||{}).value || '';
+  var adm = !!(document.getElementById('f-nu-admin')||{}).checked;
+  if(!login){ toast('Informe o e-mail ou o nome de usuário.', true); return; }
+  if(pw.length < 8){ toast('A senha precisa ter pelo menos 8 caracteres.', true); return; }
+  ui.busy = true; render();
+  var { error } = await sb.rpc('admin_create_user', { p_login: login, p_display_name: name.trim(), p_password: pw, p_admin: adm });
+  ui.busy = false;
+  if(error){ toast(errMsg(error), true); render(); return; }
+  var email = login.indexOf('@') < 0 ? login.toLowerCase() + '@gigtrack.com.br' : login.toLowerCase();
+  ui.modal = { type:'reset-done', title:'Usuário criado', password: pw, who: name.trim() || login, email: email };
   await loadAdminUsers();
   render();
 }
@@ -1298,6 +1379,7 @@ document.addEventListener('click', function(e){
     case 'open-admin': openAdmin(); break;
     case 'close-admin': ui.screen='band'; ui.search=''; render(); break;
     case 'admin-refresh': loadAdminUsers().then(render); break;
+    case 'admin-new-user': ui.modal={type:'new-user'}; render(); var nf=document.getElementById('f-nu-name'); if(nf) nf.focus(); break;
     case 'admin-reset': ui.modal={type:'reset-pw', userId:t.getAttribute('data-id')}; render(); break;
     case 'admin-gen-pw': var pwf=document.getElementById('f-reset-pw'); if(pwf) pwf.value=genPassword(); break;
     case 'admin-set': (function(id){ var u=(cache.adminUsers||[]).find(function(x){return x.id===id;});
@@ -1380,6 +1462,7 @@ document.addEventListener('submit', function(e){
   else if(action==='save-show-edit') saveShowEdit(btn.getAttribute('data-id'));
   else if(action==='save-account') changeOwnPassword('f-acc', false);
   else if(action==='save-reset-pw') adminResetPassword(btn.getAttribute('data-id'));
+  else if(action==='save-new-user') adminCreateUser();
   else if(action==='save-copy-song') copySongToBands(btn.getAttribute('data-id'));
   else if(action==='close-modal'){ ui.modal=null; render(); }
 });

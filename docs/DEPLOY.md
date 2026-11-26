@@ -100,6 +100,29 @@ contra senhas vazadas.
 6. No celular: abra o site no Chrome (Android) → menu → *Instalar app*; no iPhone, Safari →
    *Compartilhar → Adicionar à Tela de Início*.
 
+## 6. Acesso automático (para o Supabase não pausar)
+
+O plano gratuito do Supabase **pausa o projeto depois de cerca de 7 dias sem uso** — e aí o site fica
+fora do ar até alguém reativar no painel. O script `cron/keepalive.php` evita isso: de tempos em tempos
+ele abre o site, chama o login do Supabase e faz uma consulta no banco, como um visitante. Os horários
+são sorteados (a cada 2h30–3h30, minuto e segundo aleatórios, sem repetir horário).
+
+Configure uma vez no hPanel → *Websites → gigtrack.com.br → Avançado → **Cron Jobs***:
+
+1. Tipo: **PHP**.
+2. Comando / caminho do arquivo: `public_html/cron/keepalive.php`
+   (se o hPanel pedir o caminho completo: `/home/<seu-usuário>/domains/gigtrack.com.br/public_html/cron/keepalive.php`;
+   o começo aparece no Gerenciador de arquivos).
+3. Frequência: **a cada 15 minutos** (`*/15 * * * *`). O script decide sozinho quando agir; nas outras
+   chamadas ele não faz nada.
+4. Salve. Para conferir: na área administrativa (escudo) aparece "Acesso automático: último em …".
+   O primeiro acesso acontece entre 15 minutos e 1 hora depois da primeira chamada. O registro
+   detalhado fica em `cron/.keepalive.log` no Gerenciador de arquivos.
+
+Se aparecer o aviso "parado há mais de 8 horas", confira se o Cron Job continua ativo no hPanel.
+Se o projeto já estiver pausado, o script não consegue reativar: entre no painel do Supabase e clique
+em *Restore project*.
+
 ## Problemas comuns
 
 | Sintoma | Causa provável |

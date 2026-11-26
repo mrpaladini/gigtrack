@@ -23,3 +23,6 @@ test-results/
 # Python
 __pycache__/
 *.pyc
+
+# Estado e registro do acesso automático (gerados no servidor)
+cron/.keepalive-*

@@ -1,5 +1,20 @@
 # Mudanças
 
+## 1.4.0 — 26/11/2026 · Troca de tom, novos usuários e acesso automático
+
+- **Troca de tom corrigida.** A tela de cifra usava o tom cadastrado da música (tom da banda) como se
+  fosse o tom do texto colado; agora o tom vem da própria cifra (linha "Tom:" do Cifra Club ou análise
+  dos acordes, não só do primeiro). Novo botão **Tom da banda**; seletor só com tons do mesmo modo;
+  C# ↔ Db troca a grafia; linhas com N.C. e rótulos ("Intro G D") também mudam de tom; na aba Editar
+  dá para dizer em que tom a cifra está escrita; salvar não troca mais o tom da banda sem querer.
+- **Novo usuário pela área administrativa** (e-mail ou nome de usuário, senha temporária, opção de
+  admin). A conta nasce liberada e pede senha nova no primeiro acesso.
+- **Acesso automático** pelo agendador da Hostinger (`cron/keepalive.php`) para o Supabase não pausar
+  o projeto; monitor na área administrativa.
+- Formulários não perdem mais o que foi digitado quando aparece um erro ou o "Salvando…".
+- Banco: migrations `20261126010000_admin_criar_usuario.sql` e `20261126020000_keepalive.sql`.
+- Testes: `tests/test-cifra-core.js` e `tests/test-keepalive.sh`.
+
 ## 1.3.1 — 06/11/2026 · Correção
 
 - Ao abrir o site, a tela "Configuração pendente" aparecia por um instante antes do app carregar:

@@ -18,7 +18,7 @@ ServerSignature Off
   RewriteRule ^ https://gigtrack.com.br%{REQUEST_URI} [L,R=301]
 
   # 3) Pastas do repositório que não devem ficar públicas
-  RewriteRule ^(supabase|docs|tests|\.github|\.git)(/|$) - [F,L,NC]
+  RewriteRule ^(supabase|docs|tests|cron|\.github|\.git)(/|$) - [F,L,NC]
   RewriteRule (^|/)(README|CHANGELOG|LICENSE)(\.md)?$ - [F,L,NC]
   RewriteRule (^|/)(package(-lock)?\.json|composer\.(json|lock)|\.gitignore|\.gitattributes|\.editorconfig|[^/]+\.(bat|sh|py))$ - [F,L,NC]
 </IfModule>

@@ -252,6 +252,8 @@ def run_admin_flow(browser, base, label, vp, touch):
     page.click('[data-action="open-admin"]')
     page.wait_for_selector('.userrow')
     check(f'[{label}] admin lista os usuários', page.locator('.userrow').count() == 3)
+    page.wait_for_function("document.getElementById('keepalive-box') && /42 no total/.test(document.getElementById('keepalive-box').textContent)", timeout=5000)
+    check(f'[{label}] monitor do acesso automático na Administração', 'keepalive ok' in page.get_attribute('#keepalive-box', 'class') + ' ' and True)
     bruno = page.locator('.userrow', has_text='Bruno')
     check(f'[{label}] conta nova aparece aguardando liberação', 'aguardando liberação' in bruno.inner_text().lower())
     check(f'[{label}] contador de contas aguardando', '1 aguardando' in page.inner_text('.hero'))
@@ -282,6 +284,27 @@ def run_admin_flow(browser, base, label, vp, touch):
     page.click('[data-action="confirm-yes"]')
     page.wait_for_function("[...document.querySelectorAll('.userrow')].some(r => r.innerText.includes('Ana') && r.querySelector('.badge-admin'))")
     check(f'[{label}] admin promove outro usuário', True)
+    # criar usuário pelo sistema
+    page.click('[data-action="admin-new-user"]'); page.wait_for_selector('#f-nu-login')
+    page.fill('#f-nu-name', 'João Batera'); page.fill('#f-nu-login', 'jo')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_timeout(300)
+    check(f'[{label}] novo usuário: nome curto é recusado', page.locator('#f-nu-login').count() == 1 and page.evaluate('window.__lastCreated') is None)
+    page.fill('#f-nu-login', 'Joao.Batera')
+    pw_new = page.input_value('#f-reset-pw')
+    page.screenshot(path=str(OUT / f'{label}-admin-5-novo-usuario.png'))
+    page.click('.modal-foot button[type="submit"]')
+    page.wait_for_selector('.invitebox .code')
+    created = page.evaluate('window.__lastCreated')
+    check(f'[{label}] novo usuário criado com a senha mostrada', created and created['email'] == 'joao.batera@gigtrack.com.br' and page.inner_text('.invitebox .code') == pw_new == created['password'], str(created))
+    check(f'[{label}] tela mostra o login "joao.batera (usuário)"', 'joao.batera (usuário)' in page.inner_text('.modal'))
+    page.click('.modal-foot [data-action="close-modal"]')
+    nrow = page.locator('.userrow', has_text='João Batera')
+    ntxt = nrow.first.inner_text().lower() if nrow.count() else ''
+    check(f'[{label}] novo usuário na lista, liberado e com troca de senha pendente', nrow.count() == 1 and 'aguardando liberação' not in ntxt and 'troca de senha pendente' in ntxt, f'{nrow.count()} linhas: {ntxt[:160]}')
+    page.click('[data-action="admin-new-user"]'); page.wait_for_selector('#f-nu-login')
+    page.fill('#f-nu-login', 'joao.batera'); page.click('.modal-foot button[type="submit"]'); page.wait_for_timeout(300)
+    check(f'[{label}] usuário repetido é recusado', page.locator('#f-nu-login').count() == 1)
+    page.click('.modal-head [data-action="close-modal"]')
     check(f'[{label}] admin não pode tirar a si mesmo', page.locator('.userrow', has_text='(você)').locator('[data-action="admin-unset"]').count() == 0)
     page.click('[data-action="close-admin"]'); page.wait_for_selector('.main')
 
@@ -339,7 +362,62 @@ def run_pending(browser, base, label, vp, touch):
     report_errors(label + ' pendente', errors)
     ctx.close()
 
+def run_chords(browser, base, label, vp, touch):
+    """Troca de tom: música cadastrada em A (tom da banda), cifra colada do Cifra Club em G."""
+    ctx, page = new_page(browser, vp, touch)
+    errors = []
+    setup_routes(page, errors)
+    page.goto(base + '/')
+    page.wait_for_selector('.hero h1', timeout=8000)
+    new_band(page, 'Banda Cifras')
+    page.click('[data-action="new-song"]')
+    page.fill('#f-song-name', 'Tempo Perdido'); page.fill('#f-song-key', 'A')
+    page.click('.modal-foot button[type="submit"]'); page.wait_for_selector('.modal-backdrop', state='detached')
+    page.click('.songrow [data-action="open-chords"]'); page.wait_for_selector('.cf-modal')
+    page.click('.cf-tabs button:has-text("Editar")')
+    sheet = "[Intro] C  D  G\n\nG              D/F#\n  Primeira linha da letra\nEm           C\n  Segunda linha\nC     D    G\n  fim"
+    page.fill('.cf-edit', sheet)
+    key = page.eval_on_selector('.cf-key select', 'e => e.value')
+    check(f'[{label}] cifra colada: detecta G (e não usa o A cadastrado)', key == 'G', key)
+    check(f'[{label}] mostra "tom detectado"', 'tom detectado' in page.inner_text('.cf-bar'))
+    check(f'[{label}] Editar mostra em que tom a cifra está escrita', page.eval_on_selector('.cf-written select', 'e => e.value') == 'G')
+    opts = page.eval_on_selector_all('.cf-key select option', 'os => os.map(o => o.value)')
+    check(f'[{label}] seletor só com tons maiores', len(opts) == 12 and not any(o.endswith('m') for o in opts), str(opts))
+    btn = page.locator('.cf-bar button', has_text='Tom da banda')
+    check(f'[{label}] botão "Tom da banda: A"', btn.is_visible() and 'A' in btn.inner_text())
+    btn.click()
+    first = page.input_value('.cf-edit').split('\n')[2]
+    check(f'[{label}] Tom da banda transpõe G → A', first.startswith('A ') and 'E/G#' in first, first)
+    check(f'[{label}] seletor passa para A', page.eval_on_selector('.cf-key select', 'e => e.value') == 'A')
+    check(f'[{label}] botão some quando já está no tom da banda', not btn.is_visible())
+    page.click('.cf-key button[aria-label="Meio tom acima"]')
+    first = page.input_value('.cf-edit').split('\n')[2]
+    check(f'[{label}] +½ de A → Bb com bemóis', page.eval_on_selector('.cf-key select', 'e => e.value') == 'Bb' and first.startswith('Bb ') and 'F/A' in first, first)
+    page.select_option('.cf-key select', 'G')
+    check(f'[{label}] seletor volta a G e a cifra volta igual', page.input_value('.cf-edit') == sheet)
+    check(f'[{label}] "usar este tom na música" desmarcado quando a música já tem tom', not page.is_checked('.cf-foot input[type="checkbox"]'))
+    page.select_option('.cf-key select', 'A')
+    page.click('.cf-foot button:has-text("Salvar")')
+    page.wait_for_function("document.querySelector('.cf-msg') && /salva/i.test(document.querySelector('.cf-msg').textContent)", timeout=5000)
+    page.click('.cf-head button[aria-label="Fechar"]')
+    page.wait_for_selector('.cf-modal', state='detached')
+    pill = page.locator('.songrow .pill', has_text='Cifra').inner_text()
+    check(f'[{label}] cifra salva em A', 'A' in pill, pill)
+    check(f'[{label}] tom da banda continua A', 'A' in page.locator('.songrow .keybadge').inner_text())
+    page.click('.songrow [data-action="open-chords"]'); page.wait_for_selector('.cf-modal')
+    check(f'[{label}] reabrir: tom salvo, sem "detectado"', page.eval_on_selector('.cf-key select', 'e => e.value') == 'A' and 'tom detectado' not in page.inner_text('.cf-bar'))
+    page.screenshot(path=str(OUT / f'{label}-cifra-tom.png'))
+    report_errors(label + ' cifras', errors)
+    ctx.close()
+
 def main():
+    # testes do núcleo de cifras (Node), quando disponível
+    try:
+        r = subprocess.run(['node', str(ROOT / 'tests' / 'test-cifra-core.js')], capture_output=True, text=True, timeout=60)
+        last = (r.stdout.strip().splitlines() or [''])[-1]
+        check('núcleo de cifras (tests/test-cifra-core.js): ' + last, r.returncode == 0, r.stdout[-600:])
+    except FileNotFoundError:
+        print('aviso: Node não encontrado; pulando tests/test-cifra-core.js')
     port = free_port()
     srv = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bind', '127.0.0.1', '--directory', str(ROOT)],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -348,7 +426,7 @@ def main():
         with sync_playwright() as p:
             browser = p.chromium.launch()
             for label, vp, touch in VIEWPORTS:
-                for fn, nm in ((run_flow, 'fluxo completo'), (run_admin_flow, 'fluxo admin'), (run_force_password, 'troca de senha'), (run_pending, 'conta pendente')):
+                for fn, nm in ((run_flow, 'fluxo completo'), (run_admin_flow, 'fluxo admin'), (run_force_password, 'troca de senha'), (run_pending, 'conta pendente'), (run_chords, 'troca de tom')):
                     try:
                         fn(browser, f'http://127.0.0.1:{port}', label, vp, touch)
                     except Exception as e:

@@ -34,7 +34,9 @@
   .cf-key select{font:inherit;font-family:var(--font-mono,'IBM Plex Mono',monospace);padding:6px 8px;border-radius:var(--radius-sm,6px);border:1px solid var(--border,rgba(0,0,0,.18));background:var(--surface,transparent);color:inherit}
   .cf-key .lbl{font-size:.8rem;color:var(--ink-soft,#5b5a63);text-transform:uppercase;letter-spacing:.06em}
   .cf-orig{font-size:.8rem;color:var(--ink-soft,#5b5a63)}
-  .cf-link{align-items:center}.cf-link a{text-decoration:none}
+  .cf-link{align-items:center}
+  .cf-written{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 0 10px;font-size:.85rem}
+  .cf-written select{font:inherit;padding:4px 6px;border-radius:6px;border:1px solid var(--border,#d6d4cc);background:var(--surface,#fff);color:inherit}.cf-link a{text-decoration:none}
   .cf-body{flex:1;overflow:auto;min-height:240px}
   .cf-view{margin:0;padding:16px;font-family:var(--font-mono,'IBM Plex Mono',monospace);white-space:pre;line-height:1.45;font-size:var(--cf-size,15px);tab-size:4}
   .cf-view .chord{color:var(--accent,#b5720e);font-weight:700}
@@ -83,7 +85,10 @@
     var song = opts.song, sb = opts.supabase;
     var state = {
       text: song.chord_sheet || '',
-      key: song.chord_key || song.song_key || (song.chord_sheet ? C.guessKey(song.chord_sheet) : '') || '',
+      keyGuessed: !song.chord_key && !!song.chord_sheet,
+      // Tom em que o TEXTO está escrito. Não usar song_key aqui: é o tom em que a banda toca,
+      // e a cifra colada do Cifra Club costuma estar em outro tom.
+      key: song.chord_key || (song.chord_sheet ? C.guessKey(song.chord_sheet) : '') || '',
       savedKey: song.chord_key || '',
       sourceUrl: song.chord_source_url || '',
       tab: 'view',
@@ -106,12 +111,26 @@
     // --- abas, tom, fonte
     var tabView = el('button', { type: 'button', role: 'tab', text: 'Ver', onclick: function () { setTab('view'); } });
     var tabEdit = el('button', { type: 'button', role: 'tab', text: 'Editar', onclick: function () { setTab('edit'); } });
-    var keySelect = el('select', { 'aria-label': 'Tom' });
-    C.ALL_KEYS.forEach(function (k) {
-      keySelect.appendChild(el('option', { value: k, text: k }));
-      keySelect.appendChild(el('option', { value: k + 'm', text: k + 'm' }));
-    });
+    var keySelect = el('select', { 'aria-label': 'Mudar o tom' });
     keySelect.addEventListener('change', function () { changeKeyTo(keySelect.value); });
+    var bandKey = C.parseKey(song.song_key);
+    var bandKeyBtn = el('button', { class: 'cf-btn', type: 'button', hidden: 'hidden',
+      onclick: function () { if (bandKey) changeKeyTo(sameMode(bandKey.name)); } });
+    /** Tom da banda no modo da cifra (se a música está cadastrada em "A" e a cifra é menor, vai para "Am"). */
+    function sameMode(name) {
+      var k = C.parseKey(name), cur = C.parseKey(state.key);
+      if (!k || !cur) return name;
+      return k.root + (cur.minor ? 'm' : '');
+    }
+    // Na aba Editar: declarar em que tom o texto está escrito (sem transpor), para quando a detecção errar
+    var writtenSelect = el('select', { 'aria-label': 'Tom em que a cifra está escrita' });
+    writtenSelect.appendChild(el('option', { value: '', text: '—' }));
+    C.keysLike('C').concat(C.keysLike('Am')).forEach(function (k) { writtenSelect.appendChild(el('option', { value: k, text: k })); });
+    writtenSelect.addEventListener('change', function () { state.key = writtenSelect.value; state.keyGuessed = false; state.dirty = true; syncKeyUI(); });
+    var writtenBar = el('div', { class: 'cf-written' }, [
+      el('label', {}, ['A cifra abaixo está escrita em ', writtenSelect]),
+      el('span', { class: 'cf-orig', text: 'Ajuste se o tom detectado estiver errado. Isso não muda os acordes.' })
+    ]);
     var down = el('button', { class: 'cf-btn', type: 'button', title: 'Meio tom abaixo', 'aria-label': 'Meio tom abaixo', text: '−½', onclick: function () { shift(-1); } });
     var up = el('button', { class: 'cf-btn', type: 'button', title: 'Meio tom acima', 'aria-label': 'Meio tom acima', text: '+½', onclick: function () { shift(1); } });
     var origInfo = el('span', { class: 'cf-orig' });
@@ -122,10 +141,20 @@
     var pre = el('pre', { class: 'cf-view' });
     var ta = el('textarea', { class: 'cf-edit', spellcheck: 'false', 'aria-label': 'Texto da cifra',
       placeholder: 'Cole ou digite a cifra aqui. Acordes na linha de cima, letra embaixo:\n\nD           A/C#        Bm\nPrimeira linha da letra' });
-    ta.addEventListener('input', function () { state.text = ta.value; state.dirty = true; if (!state.key) state.key = C.guessKey(state.text) || ''; syncKeyUI(); });
+    ta.addEventListener('input', function () {
+      var wasEmpty = !state.text.trim();
+      state.text = ta.value; state.dirty = true;
+      // Cifra nova (colada agora) ou tom ainda não confirmado: detecta o tom pelo próprio texto
+      if (wasEmpty || state.keyGuessed || !state.key) {
+        var g = C.guessKey(state.text);
+        if (g) { state.key = g; state.keyGuessed = true; }
+      }
+      syncKeyUI();
+    });
 
     // --- rodapé
-    var updateSongKey = el('input', { type: 'checkbox', checked: 'checked' });
+    // Só vem marcado quando a música ainda não tem tom: salvar a cifra não deve trocar o tom da banda sem querer
+    var updateSongKey = el('input', song.song_key ? { type: 'checkbox' } : { type: 'checkbox', checked: 'checked' });
     var removeBtn = el('button', { class: 'cf-btn danger', type: 'button', text: 'Remover cifra', onclick: removeSheet });
     var cancelBtn = el('button', { class: 'cf-btn', type: 'button', text: 'Fechar', onclick: close });
     var saveBtn = el('button', { class: 'cf-btn primary', type: 'button', text: 'Salvar', onclick: save });
@@ -159,6 +188,7 @@
         el('div', { class: 'cf-tabs', role: 'tablist' }, [tabView, tabEdit]),
         smaller, bigger,
         el('div', { class: 'cf-key' }, [el('span', { class: 'lbl', text: 'Tom' }), down, keySelect, up]),
+        bandKeyBtn,
         origInfo
       ]),
       body,
@@ -194,6 +224,7 @@
       var from = state.key || C.guessKey(state.text);
       if (state.text && from) state.text = C.transposeToKey(state.text, from, target);
       state.key = target;
+      state.keyGuessed = false;
       state.dirty = true;
       render();
     }
@@ -202,11 +233,19 @@
       var k = C.parseKey(state.key);
       var has = !!state.text;
       keySelect.disabled = up.disabled = down.disabled = !has;
-      if (k) {
-        if (![].some.call(keySelect.options, function (o) { return o.value === k.name; })) keySelect.appendChild(el('option', { value: k.name, text: k.name }));
-        keySelect.value = k.name;
-      }
-      origInfo.textContent = state.savedKey && k && state.savedKey !== k.name ? 'salva em ' + state.savedKey : '';
+      keySelect.innerHTML = '';
+      if (!k) keySelect.appendChild(el('option', { value: '', text: '?' }));
+      C.keysLike(k ? k.name : 'C').forEach(function (name) { keySelect.appendChild(el('option', { value: name, text: name })); });
+      keySelect.value = k ? k.name : '';
+      writtenSelect.value = k ? k.name : '';
+      // atalho para o tom em que a banda toca (cadastrado na música)
+      var target = bandKey && k ? sameMode(bandKey.name) : null;
+      bandKeyBtn.hidden = !(has && target && C.semitonesBetween(k.name, target) !== 0);
+      if (target) bandKeyBtn.textContent = 'Tom da banda: ' + target;
+      var info = [];
+      if (state.keyGuessed && k) info.push('tom detectado');
+      if (state.savedKey && k && state.savedKey !== k.name) info.push('salva em ' + state.savedKey);
+      origInfo.textContent = info.join(' · ');
       saveBtn.disabled = !state.dirty;
       removeBtn.hidden = !song.chord_sheet;
     }
@@ -223,6 +262,7 @@
       body.innerHTML = '';
       if (state.tab === 'edit') {
         ta.value = state.text;
+        body.appendChild(writtenBar);
         body.appendChild(ta);
       } else if (state.text) {
         pre.innerHTML = C.toHTML(state.text);
@@ -249,7 +289,7 @@
       saveBtn.textContent = 'Salvar';
       if (res.error) { say('Não foi possível salvar: ' + res.error.message, 'err'); saveBtn.disabled = false; return; }
       Object.assign(song, res.data || patch);
-      state.dirty = false; state.savedKey = patch.chord_key || '';
+      state.dirty = false; state.keyGuessed = false; state.savedKey = patch.chord_key || '';
       say('Cifra salva.', 'ok');
       syncKeyUI();
       if (opts.onSaved) opts.onSaved(song);

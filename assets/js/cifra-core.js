@@ -23,7 +23,9 @@
   // Raiz + acidente + qualidade/extensões + baixo opcional (ex.: D, F#m7, A7(9), Bb7M, D/F#, Gº, Esus4)
   var CHORD_RE = /^([A-G])([#b]?)((?:maj|min|dim|aug|sus|add|[mM]|º|°|\+|-|\d|\(|\)|#|b|\/(?=\d))*)(?:\/([A-G])([#b]?))?$/;
   // Tokens que podem aparecer numa linha de acordes sem serem acordes
-  var DECOR_RE = /^(\[[^\]]*\]|[A-Za-zÀ-ú]+:|\(?\d+x\)?|x\d+|\||\|\||-+|\.+|\(|\)|%|\/)$/i;
+  var DECOR_RE = /^(\[[^\]]*\]|[A-Za-zÀ-ú]+:|\(?\d+x\)?|\(?x\d+\)?|\||\|\||-+|\.+|\(|\)|%|\/|N\.?C\.?|→|->|>)$/i;
+  // Rótulos de seção que às vezes vêm sem dois-pontos, só no início da linha ("Intro G D Em")
+  var LABEL_RE = /^(intro|introdução|solo|final|fim|refrão|refrao|ponte|riff|base|interlúdio|interludio|pré-refrão|pre-refrao|coda|outro|verso|parte|dedilhado)$/i;
   var TAB_LINE_RE = /^\s*[A-Ga-g][#b]?\s*\|[-\d|hpbrx~\/\\. ]*$/;
 
   function isChord(token) { return CHORD_RE.test(token); }
@@ -41,7 +43,7 @@
     for (var i = 0; i < tokens.length; i++) {
       var t = tokens[i];
       if (isChord(t) || isChord(stripParens(t))) chords++;
-      else if (!DECOR_RE.test(t)) return false;
+      else if (!DECOR_RE.test(t) && !(i === 0 && tokens.length > 1 && LABEL_RE.test(t))) return false;
     }
     return chords > 0;
   }
@@ -91,7 +93,8 @@
         } else debt += diff;
       }
     }
-    return out;
+    // não deixa sobrar espaço no fim da linha (acumularia a cada troca de tom)
+    return out.replace(/\s+$/, '') + (/\s*$/.exec(line) || [''])[0];
   }
 
   function transposeInline(line, semitones, useFlats) {
@@ -103,7 +106,8 @@
   /** Transpõe a cifra inteira. */
   function transpose(text, semitones, opts) {
     semitones = ((semitones % 12) + 12) % 12;
-    if (!text || semitones === 0) return text || '';
+    var respell = !!(opts && opts.respell);  // mesma altura, só troca a grafia (C# ↔ Db)
+    if (!text || (semitones === 0 && !respell)) return text || '';
     var useFlats = opts && typeof opts.useFlats === 'boolean' ? opts.useFlats : false;
     return text.split('\n').map(function (line) {
       if (isChordLine(line)) return transposeChordLine(line, semitones, useFlats);
@@ -149,21 +153,82 @@
 
   /** Transpõe a cifra de um tom para outro, escolhendo sustenidos/bemóis conforme o tom de destino. */
   function transposeToKey(text, fromKey, toKey) {
-    return transpose(text, semitonesBetween(fromKey, toKey), { useFlats: prefersFlats(toKey) });
+    var semis = semitonesBetween(fromKey, toKey);
+    var a = parseKey(fromKey), b = parseKey(toKey);
+    var respell = semis === 0 && !!a && !!b && a.root !== b.root;
+    return transpose(text, semis, { useFlats: prefersFlats(toKey), respell: respell });
   }
 
-  /** Tenta descobrir o tom pelo primeiro acorde da cifra (fallback quando o tom não veio informado). */
-  function guessKey(text) {
-    var lines = (text || '').split('\n');
-    for (var i = 0; i < lines.length; i++) {
-      if (!isChordLine(lines[i])) continue;
-      var toks = lines[i].trim().split(/\s+/);
-      for (var j = 0; j < toks.length; j++) {
-        var m = CHORD_RE.exec(stripParens(toks[j]));
-        if (m) return m[1] + m[2] + (/^m(?!aj)/.test(m[3]) ? 'm' : '');
-      }
+  /** Mesmo tom no outro modo não faz sentido no seletor: lista os 12 tons do modo de `key` (grafia usual). */
+  function keysLike(key) {
+    var k = parseKey(key);
+    var minor = !!(k && k.minor);
+    var out = [];
+    for (var i = 0; i < 12; i++) out.push(transposeKey(minor ? 'Am' : 'C', i));
+    out.sort(function (x, y) { return NOTE_INDEX[parseKey(x).root] - NOTE_INDEX[parseKey(y).root]; });
+    if (k && out.indexOf(k.name) === -1) {  // grafia alternativa escolhida pelo usuário (ex.: C# em vez de Db)
+      var idx = NOTE_INDEX[k.root];
+      out = out.map(function (o) { return NOTE_INDEX[parseKey(o).root] === idx ? k.name : o; });
     }
-    return null;
+    return out;
+  }
+
+  /** Lê as notas dos acordes da cifra: [{root: 0-11, q: 'M'|'m'|'d'}] na ordem em que aparecem. */
+  function chordsOf(text) {
+    var out = [];
+    (text || '').split('\n').forEach(function (line) {
+      var toks = [];
+      if (isChordLine(line)) toks = line.trim().split(/\s+/).map(stripParens);
+      else line.replace(/\[([^\]\s]+)\]/g, function (all, c) { toks.push(c); return all; });
+      toks.forEach(function (t) {
+        var m = CHORD_RE.exec(t);
+        if (!m) return;
+        var q = m[3] || '';
+        var kind = /^(dim|º|°)/.test(q) || /m7?\(?b5|5-|º|°/.test(q) ? 'd' : (/^m(?!aj)|^min/.test(q) ? 'm' : 'M');
+        out.push({ root: NOTE_INDEX[m[1] + m[2]], q: kind, name: m[1] + m[2] });
+      });
+    });
+    return out;
+  }
+
+  // Graus diatônicos (semitons acima da tônica → qualidade esperada)
+  var MAJOR_DEG = { 0: 'M', 2: 'm', 4: 'm', 5: 'M', 7: 'M', 9: 'm', 11: 'd' };
+  var MINOR_DEG = { 0: 'm', 2: 'd', 3: 'M', 5: 'm', 7: 'Mm', 8: 'M', 10: 'M' };
+
+  /**
+   * Descobre o tom da cifra. Ordem: linha "Tom: X" (vem junto quando se copia do Cifra Club);
+   * depois, análise harmônica — o tom em que mais acordes são diatônicos, com peso extra para
+   * o primeiro e, principalmente, o último acorde.
+   */
+  function guessKey(text) {
+    var tomLine = /(^|\n)\s*tom\s*:\s*([A-G][#b]?m?)\b/i.exec(text || '');
+    if (tomLine && parseKey(tomLine[2])) return parseKey(tomLine[2]).name;
+    var chords = chordsOf(text);
+    if (!chords.length) return null;
+    var first = chords[0], last = chords[chords.length - 1];
+    var best = null;
+    for (var tonic = 0; tonic < 12; tonic++) {
+      [false, true].forEach(function (minor) {
+        var deg = minor ? MINOR_DEG : MAJOR_DEG;
+        var score = 0;
+        chords.forEach(function (c) {
+          var d = ((c.root - tonic) % 12 + 12) % 12;
+          var want = deg[d];
+          if (want && want.indexOf(c.q) !== -1) score += 1;
+          else if (want) score += 0.25;     // grau certo, qualidade emprestada
+          else score -= 0.5;                // fora do tom
+        });
+        var tq = minor ? 'm' : 'M';
+        if (first.root === tonic && first.q === tq) score += 2;
+        if (last.root === tonic && last.q === tq) score += 3;
+        if (!best || score > best.score) best = { score: score, tonic: tonic, minor: minor };
+      });
+    }
+    // grafia: a do acorde da tônica, se aparecer na cifra; senão a usual
+    var spelled = null;
+    chords.some(function (c) { if (c.root === best.tonic) { spelled = c.name; return true; } return false; });
+    var name = spelled || transposeKey(best.minor ? 'Am' : 'C', ((best.tonic - (best.minor ? 9 : 0)) % 12 + 12) % 12).replace(/m$/, '');
+    return parseKey(name).root + (best.minor ? 'm' : '');
   }
 
   function esc(s) {
@@ -199,6 +264,7 @@
     parseKey: parseKey,
     prefersFlats: prefersFlats,
     guessKey: guessKey,
+    keysLike: keysLike,
     toHTML: toHTML,
     ALL_KEYS: ALL_KEYS
   };

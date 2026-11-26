@@ -221,6 +221,24 @@
       if (args.p_admin) mem.app_admins.push({ user_id: args.p_user_id });
       return { data: null, error: null };
     }
+    if (name === 'admin_keepalive_status') {
+      if (!isAdm) return deny;
+      return { data: OPT.noKeepalive ? [] : [{ last_at: new Date(Date.now() - 50 * 60000).toISOString(), last_source: 'hostinger-cron', total: 42 }], error: null };
+    }
+    if (name === 'admin_create_user') {
+      if (!isAdm) return deny;
+      var lg = String(args.p_login || '').trim().toLowerCase();
+      var em = lg.indexOf('@') < 0 ? lg + '@gigtrack.com.br' : lg;
+      if (lg.indexOf('@') < 0 && !/^[a-z0-9][a-z0-9._-]{2,30}$/.test(lg)) return { data: null, error: { message: 'Nome de usuário inválido: use de 3 a 31 letras sem acento, números, ponto, hífen ou sublinhado.' } };
+      if (String(args.p_password || '').length < 8) return { data: null, error: { message: 'A senha precisa ter pelo menos 8 caracteres.' } };
+      if (mem._users.some(function (u) { return u.email === em; })) return { data: null, error: { message: 'Já existe uma conta com esse e-mail ou usuário.' } };
+      var nid = newId();
+      mem._users.unshift({ id: nid, email: em, created_at: new Date().toISOString(), last_sign_in_at: null });
+      mem.profiles.push({ id: nid, display_name: String(args.p_display_name || '').trim() || em.split('@')[0], must_change_password: true, approved: true });
+      if (args.p_admin) mem.app_admins.push({ user_id: nid });
+      window.__lastCreated = { email: em, password: args.p_password, admin: !!args.p_admin };
+      return { data: nid, error: null };
+    }
     if (name === 'admin_set_approved') {
       if (!isAdm) return deny;
       if (!args.p_approved && args.p_user_id === me) return { data: null, error: { message: 'Você não pode bloquear a sua própria conta.' } };
